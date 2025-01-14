@@ -4,9 +4,10 @@ use serde::Deserialize;
 use serde_json::json;
 use std::{
     error::Error,
-    io::{self, BufReader, Read, Write},
+    io::{self, Write},
     net::{IpAddr, SocketAddr, TcpListener, TcpStream},
     path::PathBuf,
+    thread,
 };
 
 #[derive(Parser, Debug)]
@@ -81,9 +82,11 @@ fn run_server(args: ServerArgs) -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind(addr)?;
 
     for stream in listener.incoming() {
-        if let Err(e) = handle_connection(stream) {
-            print_error(e.as_ref());
-        }
+        thread::spawn(move || {
+            if let Err(e) = handle_connection(stream) {
+                print_error(e.as_ref());
+            }
+        });
     }
 
     Ok(())
