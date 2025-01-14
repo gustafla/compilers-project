@@ -81,6 +81,8 @@ fn run_server(args: ServerArgs) -> Result<(), Box<dyn Error>> {
     let addr = SocketAddr::new(args.ip, args.port);
     let listener = TcpListener::bind(addr)?;
 
+    println!("Listening on {addr}");
+
     for stream in listener.incoming() {
         thread::spawn(move || {
             if let Err(e) = handle_connection(stream) {
