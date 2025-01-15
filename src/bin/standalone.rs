@@ -1,6 +1,19 @@
 use clap::Parser;
 use compilers_project as compiler;
-use std::path::PathBuf;
+use std::{
+    error::Error,
+    ffi::OsStr,
+    fs::{self, OpenOptions},
+    io::{self, Write},
+    path::{Path, PathBuf},
+};
+
+macro_rules! err {
+    ($e: expr) => {{
+        ::compilers_project::print_error($e);
+        ::std::process::exit(1);
+    }};
+}
 
 #[derive(Parser, Debug)]
 #[command(version, about = "Compilers Course Project - Standalone Compiler")]
@@ -13,9 +26,46 @@ struct Cli {
     files: Vec<PathBuf>,
 }
 
-fn main() {
-    let cli = Cli::parse();
+fn output_to_file(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> io::Result<()> {
+    let mut file = OpenOptions::new().create_new(true).write(true).open(path)?;
+    file.write_all(data.as_ref())
+}
 
-    println!("{cli:?}");
-    unimplemented!();
+fn main() {
+    let mut cli = Cli::parse();
+
+    let input = {
+        if cli.files.len() > 1 {
+            let error: Box<dyn Error> = "Only one source file is currently supported".into();
+            err!(error.as_ref());
+        }
+        #[allow(clippy::unwrap_used, reason = "Required argument can't be empty")]
+        cli.files.pop().unwrap()
+    };
+
+    let code = match fs::read_to_string(&input) {
+        Ok(code) => code,
+        Err(ref e) => err!(e),
+    };
+
+    let program = match compiler::compile(&code, &cli.config) {
+        Ok(program) => program,
+        Err(ref e) => err!(e),
+    };
+
+    let output = cli.output.unwrap_or_else(|| {
+        input
+            .file_stem()
+            .unwrap_or_else(|| OsStr::new("a.out"))
+            .into()
+    });
+
+    if cli.config.verbose {
+        println!("Writing compiler output to {}", output.display());
+    }
+
+    if let Err(ref e) = output_to_file(&output, program) {
+        eprintln!("Can't write compiler output to {}", output.display());
+        err!(e);
+    }
 }
