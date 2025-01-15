@@ -65,19 +65,30 @@ fn regex_integer() {
 
 #[test]
 fn regex_quoted_string_literal() {
-    let re = re!(r#""(.*)""#);
+    let re = re!(r#"".*?""#);
     assert!(re.is_match(r#""Hello world!""#));
     assert!(re.is_match(r#""""#));
     assert!(!re.is_match(r#"""#));
-    let cap = re.captures(r#""Rust or Bust".to_owned()"#).unwrap();
-    assert_eq!(cap.get(1).unwrap().as_str(), "Rust or Bust");
+    let mat = re.find(r#""Rust or Bust".to_owned()"#).unwrap();
+    assert_eq!(mat.as_str(), r#""Rust or Bust""#);
+    let mat = re
+        .find(r#"let s = vec!["Rust or Bust", "Ferris the Crab"];"#)
+        .unwrap();
+    assert_eq!(mat.as_str(), r#""Rust or Bust""#);
+    let mat = re
+        .find_at(
+            r#"let s = vec!["Rust or Bust", "Ferris the Crab"];"#,
+            mat.end() + 1,
+        )
+        .unwrap();
+    assert_eq!(mat.as_str(), r#""Ferris the Crab""#);
 }
 
 #[test]
 fn regex_quoted_string_literal_with_escaped_quotes() {
-    let re = re!(r#""(.*)""#);
-    let cap = re.captures(r#""\"Rust or \"Bust\"\"".to_owned()"#).unwrap();
-    assert_eq!(cap.get(1).unwrap().as_str(), r#"\"Rust or \"Bust\"\""#);
+    let re = re!(r#"".*?[^\\]""#);
+    let mat = re.find(r#""\"Rust or \"Bust\"\"".to_owned()"#).unwrap();
+    assert_eq!(mat.as_str(), r#""\"Rust or \"Bust\"\"""#);
 }
 
 #[test]
