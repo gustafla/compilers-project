@@ -1,3 +1,5 @@
+mod tokenizer;
+
 use clap::Args;
 use thiserror::Error;
 
