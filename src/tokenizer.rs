@@ -3,7 +3,10 @@ mod tests;
 
 use crate::Config;
 use regex::Regex;
-use std::ops::{Index, Range};
+use std::{
+    ops::{Index, Range},
+    sync::LazyLock,
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -82,17 +85,32 @@ impl Index<usize> for Tokens<'_> {
     }
 }
 
+#[allow(
+    clippy::unwrap_used,
+    reason = "Regular expressions compiled from literals"
+)]
+static LINE_TERMINATOR: LazyLock<Regex> = LazyLock::new(|| Regex::new("(?:\r\n|\n)").unwrap());
+
 fn count_line_terminators(fragment: &str) -> usize {
-    #[allow(
-        clippy::unwrap_used,
-        reason = "Regular expressions compiled from literals"
-    )]
-    let line_terminator = Regex::new("(?:\r\n|\n)").unwrap();
-    line_terminator.find_iter(fragment).count()
+    LINE_TERMINATOR.find_iter(fragment).count()
 }
 
-pub fn tokenize<'a>(code: &'a str, config: &Config) -> Result<Tokens<'a>, Error> {
-    let patterns = [
+macro_rules! regex_array{
+    [$(($pat: literal, $kind: expr)),*$(,)?] => {
+        [
+            $(
+                (::regex::Regex::new($pat).unwrap(), $kind),
+            )*
+        ]
+    };
+}
+
+#[allow(
+    clippy::unwrap_used,
+    reason = "Regular expressions compiled from literals"
+)]
+static REGULAR_EXPRESSIONS: LazyLock<[(Regex, Option<Kind>); 8]> = LazyLock::new(|| {
+    regex_array![
         // Whitespace
         (r#"^\s+"#, None),
         // Comment
@@ -108,21 +126,14 @@ pub fn tokenize<'a>(code: &'a str, config: &Config) -> Result<Tokens<'a>, Error>
         // Identifier
         (
             r#"^[[:alpha:]_][[:alpha:]_[:digit:]]*"#,
-            Some(Kind::Identifier),
+            Some(Kind::Identifier)
         ),
         // String literal
         (r#"^".*?[^\\]""#, Some(Kind::StrLiteral)),
-    ];
+    ]
+});
 
-    #[allow(
-        clippy::unwrap_used,
-        reason = "Regular expressions compiled from literals"
-    )]
-    let res: Vec<(Regex, Option<Kind>)> = patterns
-        .iter()
-        .map(|(pat, kind)| (Regex::new(pat).unwrap(), *kind))
-        .collect();
-
+pub fn tokenize<'a>(code: &'a str, config: &Config) -> Result<Tokens<'a>, Error> {
     let mut tokens = Vec::new();
     let mut at: usize = 0;
 
@@ -137,7 +148,7 @@ pub fn tokenize<'a>(code: &'a str, config: &Config) -> Result<Tokens<'a>, Error>
             break Ok(Tokens { tokens, code });
         }
 
-        for (re, kind) in res.iter() {
+        for (re, kind) in REGULAR_EXPRESSIONS.iter() {
             // Try current regex
             // Don't use Regex::find_at(), it considers the context around the haystack, so the ^-anchor won't match
             let Some(mat) = re.find(rest) else {
