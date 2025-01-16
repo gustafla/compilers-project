@@ -4,11 +4,13 @@ use super::*;
 
 impl PartialEq<&[&str]> for Tokens<'_> {
     fn eq(&self, other: &&[&str]) -> bool {
+        dbg!((self.tokens.len(), other.len()));
         if self.tokens.len() != other.len() {
             return false;
         }
 
         for (tok, &string) in self.tokens.iter().zip(*other) {
+            dbg!((tok.as_str(self.code), string));
             if tok.as_str(self.code) != string {
                 return false;
             }
@@ -36,6 +38,51 @@ fn tokenizer_unrecognized() {
 }
 
 #[test]
+fn tokenizer_operators() {
+    let code = "+-*/===!=<<=>>=";
+    let tokens = tokenize(code, &Default::default()).unwrap();
+    assert_eq!(
+        tokens,
+        &["+", "-", "*", "/", "==", "=", "!=", "<", "<=", ">", ">="]
+    );
+}
+
+#[test]
+fn tokenizer_punctuation() {
+    let code = r#"int main(int argc, char **argv) {
+    printf("Hello World!");
+    return 0;
+}"#;
+    let tokens = tokenize(code, &Default::default()).unwrap();
+    assert_eq!(
+        tokens,
+        &[
+            "int",
+            "main",
+            "(",
+            "int",
+            "argc",
+            ",",
+            "char",
+            "*",
+            "*",
+            "argv",
+            ")",
+            "{",
+            "printf",
+            "(",
+            "\"Hello World!\"",
+            ")",
+            ";",
+            "return",
+            "0",
+            ";",
+            "}"
+        ]
+    );
+}
+
+#[test]
 fn tokenizer_comment() {
     let code = r#"while 1 do // This is a comment
     thing"#;
@@ -52,7 +99,7 @@ fn tokenizer_comment() {
     assert_eq!(tokens, &["while", "1", "do", "rust"]);
 
     let code = r#"/**/while 1 do/*This is a comment
-also this*/rust//wow"#;
+also this*/rust#wow"#;
     let tokens = tokenize(code, &Default::default()).unwrap();
     assert_eq!(tokens, &["while", "1", "do", "rust"]);
 

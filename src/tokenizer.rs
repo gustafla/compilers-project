@@ -18,6 +18,7 @@ pub enum Kind {
     Operator,
     Punctuation,
     Identifier,
+    StrLiteral,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -95,18 +96,22 @@ pub fn tokenize<'a>(code: &'a str, config: &Config) -> Result<Tokens<'a>, Error>
         // Whitespace
         (r#"^\s+"#, None),
         // Comment
-        (r#"(?m)^//.*$"#, None),
+        (r#"(?m)^(?://|#).*$"#, None),
         // Block comment
         (r#"(?s)^/\*.*?\*/"#, None),
-        // Identifier and keyword
+        // Integer
+        (r#"^[[:digit:]]+"#, Some(Kind::Integer)),
+        // Operator
+        (r#"^(?:==|!=|<=|>=|\+|-|\*|/|=|<|>)"#, Some(Kind::Operator)),
+        // Punctuation
+        (r#"^[(){},;]"#, Some(Kind::Punctuation)),
+        // Identifier
         (
             r#"^[[:alpha:]_][[:alpha:]_[:digit:]]*"#,
             Some(Kind::Identifier),
         ),
-        // Arithmetic operator
-        (r#"^[-+*/]"#, Some(Kind::Operator)),
-        // Integer
-        (r#"^[[:digit:]]+"#, Some(Kind::Integer)),
+        // String literal
+        (r#"^".*?[^\\]""#, Some(Kind::StrLiteral)),
     ];
 
     #[allow(
