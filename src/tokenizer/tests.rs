@@ -2,16 +2,20 @@
 
 use super::*;
 
-impl PartialEq<&[&str]> for Tokens<'_> {
-    fn eq(&self, other: &&[&str]) -> bool {
+impl PartialEq<&[(&str, Kind)]> for Tokens<'_> {
+    fn eq(&self, other: &&[(&str, Kind)]) -> bool {
         dbg!((self.tokens.len(), other.len()));
         if self.tokens.len() != other.len() {
             return false;
         }
 
-        for (tok, &string) in self.tokens.iter().zip(*other) {
+        for (tok, (string, kind)) in self.tokens.iter().zip(*other) {
+            dbg!((tok.kind, *kind));
+            if tok.kind != *kind {
+                return false;
+            }
             dbg!((tok.as_str(self.code), string));
-            if tok.as_str(self.code) != string {
+            if tok.as_str(self.code) != *string {
                 return false;
             }
         }
@@ -24,10 +28,28 @@ impl PartialEq<&[&str]> for Tokens<'_> {
 fn tokenizer_basics() {
     let code = r#"while 1 + 11*123"#;
     let tokens = tokenize(code, &Default::default()).unwrap();
-    assert_eq!(tokens, &["while", "1", "+", "11", "*", "123"]);
+    assert_eq!(
+        tokens,
+        &[
+            ("while", Kind::Identifier),
+            ("1", Kind::Integer),
+            ("+", Kind::Operator),
+            ("11", Kind::Integer),
+            ("*", Kind::Operator),
+            ("123", Kind::Integer),
+        ]
+    );
     let code = r#"0012-0x"#;
     let tokens = tokenize(code, &Default::default()).unwrap();
-    assert_eq!(tokens, &["0012", "-", "0", "x"]);
+    assert_eq!(
+        tokens,
+        &[
+            ("0012", Kind::Integer),
+            ("-", Kind::Operator),
+            ("0", Kind::Integer),
+            ("x", Kind::Identifier),
+        ]
+    );
 }
 
 #[test]
@@ -43,7 +65,19 @@ fn tokenizer_operators() {
     let tokens = tokenize(code, &Default::default()).unwrap();
     assert_eq!(
         tokens,
-        &["+", "-", "*", "/", "==", "=", "!=", "<", "<=", ">", ">="]
+        &[
+            ("+", Kind::Operator),
+            ("-", Kind::Operator),
+            ("*", Kind::Operator),
+            ("/", Kind::Operator),
+            ("==", Kind::Operator),
+            ("=", Kind::Operator),
+            ("!=", Kind::Operator),
+            ("<", Kind::Operator),
+            ("<=", Kind::Operator),
+            (">", Kind::Operator),
+            (">=", Kind::Operator),
+        ]
     );
 }
 
@@ -57,27 +91,27 @@ fn tokenizer_punctuation() {
     assert_eq!(
         tokens,
         &[
-            "int",
-            "main",
-            "(",
-            "int",
-            "argc",
-            ",",
-            "char",
-            "*",
-            "*",
-            "argv",
-            ")",
-            "{",
-            "printf",
-            "(",
-            "\"Hello World!\"",
-            ")",
-            ";",
-            "return",
-            "0",
-            ";",
-            "}"
+            ("int", Kind::Identifier),
+            ("main", Kind::Identifier),
+            ("(", Kind::Punctuation),
+            ("int", Kind::Identifier),
+            ("argc", Kind::Identifier),
+            (",", Kind::Punctuation),
+            ("char", Kind::Identifier),
+            ("*", Kind::Operator),
+            ("*", Kind::Operator),
+            ("argv", Kind::Identifier),
+            (")", Kind::Punctuation),
+            ("{", Kind::Punctuation),
+            ("printf", Kind::Identifier),
+            ("(", Kind::Punctuation),
+            ("\"Hello World!\"", Kind::StrLiteral),
+            (")", Kind::Punctuation),
+            (";", Kind::Punctuation),
+            ("return", Kind::Identifier),
+            ("0", Kind::Integer),
+            (";", Kind::Punctuation),
+            ("}", Kind::Punctuation),
         ]
     );
 }
@@ -87,26 +121,58 @@ fn tokenizer_comment() {
     let code = r#"while 1 do // This is a comment
     thing"#;
     let tokens = tokenize(code, &Default::default()).unwrap();
-    assert_eq!(tokens, &["while", "1", "do", "thing"]);
+    assert_eq!(
+        tokens,
+        &[
+            ("while", Kind::Identifier),
+            ("1", Kind::Integer),
+            ("do", Kind::Identifier),
+            ("thing", Kind::Identifier)
+        ]
+    );
 
     let code = r#"while 1 do /* This is a comment */ rust"#;
     let tokens = tokenize(code, &Default::default()).unwrap();
-    assert_eq!(tokens, &["while", "1", "do", "rust"]);
+    assert_eq!(
+        tokens,
+        &[
+            ("while", Kind::Identifier),
+            ("1", Kind::Integer),
+            ("do", Kind::Identifier),
+            ("rust", Kind::Identifier)
+        ]
+    );
 
     let code = r#"while 1 do /* This is a comment
     also this*/ rust"#;
     let tokens = tokenize(code, &Default::default()).unwrap();
-    assert_eq!(tokens, &["while", "1", "do", "rust"]);
+    assert_eq!(
+        tokens,
+        &[
+            ("while", Kind::Identifier),
+            ("1", Kind::Integer),
+            ("do", Kind::Identifier),
+            ("rust", Kind::Identifier)
+        ]
+    );
 
     let code = r#"/**/while 1 do/*This is a comment
 also this*/rust#wow"#;
     let tokens = tokenize(code, &Default::default()).unwrap();
-    assert_eq!(tokens, &["while", "1", "do", "rust"]);
+    assert_eq!(
+        tokens,
+        &[
+            ("while", Kind::Identifier),
+            ("1", Kind::Integer),
+            ("do", Kind::Identifier),
+            ("rust", Kind::Identifier),
+        ]
+    );
 
     let code = r#"//
 rust//wow"#;
     let tokens = tokenize(code, &Default::default()).unwrap();
-    assert_eq!(tokens, &["rust"]);
+    assert_eq!(tokens, &[("rust", Kind::Identifier)]);
 }
 
 #[test]
@@ -122,7 +188,16 @@ fn tokenizer_line_numbers() {
     let tokens = tokenize(code, &Default::default()).unwrap();
     assert_eq!(
         tokens,
-        &["while", "1", "do", "thing", "thing2", "thing3", "thing4", "last"]
+        &[
+            ("while", Kind::Identifier),
+            ("1", Kind::Integer),
+            ("do", Kind::Identifier),
+            ("thing", Kind::Identifier),
+            ("thing2", Kind::Identifier),
+            ("thing3", Kind::Identifier),
+            ("thing4", Kind::Identifier),
+            ("last", Kind::Identifier)
+        ]
     );
 
     assert_eq!(tokens[0].line(code), 1);
