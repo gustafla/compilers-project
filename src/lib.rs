@@ -9,12 +9,17 @@ pub struct Config {
     pub verbose: bool,
 }
 
-#[derive(Error, Debug)]
-pub enum Error {}
+#[cfg(test)]
+impl Default for Config {
+    fn default() -> Self {
+        Self { verbose: true }
+    }
+}
 
-#[expect(unused_variables, reason = "Unimplemented")]
-pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
-    Ok(b"Hello!\n".to_vec())
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Could not tokenize input")]
+    Tokenize(#[from] tokenizer::Error),
 }
 
 pub fn print_error(mut error: &dyn std::error::Error) {
@@ -23,4 +28,10 @@ pub fn print_error(mut error: &dyn std::error::Error) {
         eprintln!("Caused by: \x1b[35m{source}\x1b[0m");
         error = source;
     }
+}
+
+#[expect(unused_variables, reason = "Unimplemented")]
+pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
+    let tokens = tokenizer::tokenize(code, config)?;
+    todo!()
 }

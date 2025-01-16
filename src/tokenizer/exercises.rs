@@ -31,7 +31,7 @@ fn regex_hello_there() {
 
 #[test]
 fn regex_arithmetic_operator() {
-    let re = re!(r"[+\-*/]");
+    let re = re!(r"[-+*/]");
     assert!(re.is_match("hello+there"));
     assert!(re.is_match("hello-there"));
     assert!(re.is_match("hello*there"));
@@ -89,6 +89,12 @@ fn regex_quoted_string_literal_with_escaped_quotes() {
     let re = re!(r#"".*?[^\\]""#);
     let mat = re.find(r#""\"Rust or \"Bust\"\"".to_owned()"#).unwrap();
     assert_eq!(mat.as_str(), r#""\"Rust or \"Bust\"\"""#);
+    let mat: Vec<Match> = dbg!(re
+        .find_iter(r#"field: "this \"string\"", second: "and this""#)
+        .collect());
+    assert_eq!(mat.len(), 2);
+    assert_eq!(mat[0].as_str(), r#""this \"string\"""#);
+    assert_eq!(mat[1].as_str(), r#""and this""#);
 }
 
 #[test]
