@@ -7,7 +7,7 @@ use std::{ops::Range, sync::LazyLock};
 )]
 static LINE_TERMINATOR: LazyLock<Regex> = LazyLock::new(|| Regex::new("(?:\r\n|\n)").unwrap());
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Location(Range<usize>);
 
 impl Location {
@@ -36,5 +36,11 @@ impl Location {
 impl From<Range<usize>> for Location {
     fn from(value: Range<usize>) -> Self {
         Self(value)
+    }
+}
+
+impl Default for Location {
+    fn default() -> Self {
+        (0..1).into()
     }
 }

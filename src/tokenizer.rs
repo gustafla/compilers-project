@@ -3,7 +3,12 @@ mod tests;
 
 use crate::{Config, Location};
 use regex::Regex;
-use std::{ops::Index, slice, sync::LazyLock};
+use std::{
+    borrow::Cow,
+    ops::{Deref, Index},
+    slice,
+    sync::LazyLock,
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -14,6 +19,7 @@ pub enum Error {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Kind {
+    End,
     Integer,
     Operator,
     Punctuation,
@@ -21,13 +27,20 @@ pub enum Kind {
     StrLiteral,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Token {
     kind: Kind,
     location: Location,
 }
 
 impl Token {
+    pub fn end(location: Location) -> Self {
+        Self {
+            kind: Kind::End,
+            location,
+        }
+    }
+
     pub fn as_str<'a>(&self, code: &'a str) -> &'a str {
         &code[self.location.start()..self.location.end()]
     }
@@ -52,20 +65,20 @@ pub struct Tokens<'a> {
 }
 
 impl Tokens<'_> {
-    pub fn tokens(&self) -> &[Token] {
-        &self.tokens
-    }
-
-    pub fn iter(&self) -> slice::Iter<Token> {
-        self.tokens().iter()
-    }
-
-    pub fn get(&self, index: usize) -> Option<&Token> {
-        self.tokens.get(index)
-    }
-
     pub fn code(&self) -> &str {
         self.code
+    }
+
+    pub fn peek(&self, at: usize) -> Token {
+        match self.get(at).cloned() {
+            Some(token) => token,
+            None => Token::end(
+                self.last()
+                    .map(Token::location)
+                    .cloned()
+                    .unwrap_or_default(),
+            ),
+        }
     }
 }
 
@@ -74,6 +87,14 @@ impl Index<usize> for Tokens<'_> {
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.tokens[index]
+    }
+}
+
+impl Deref for Tokens<'_> {
+    type Target = [Token];
+
+    fn deref(&self) -> &Self::Target {
+        self.tokens.deref()
     }
 }
 

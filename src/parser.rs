@@ -1,14 +1,39 @@
+mod tests;
+
 use crate::{
     tokenizer::{Kind, Token, Tokens},
     Config,
 };
+use std::{fmt::Display, num::ParseIntError, str::ParseBoolError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum Error {}
+pub enum Error {
+    #[error("Expected one of {of:?}, but encountered {token:?}")]
+    ExpectedOneOf { of: Vec<String>, token: String },
+    #[error("Expected a literal, but encountered {0:?}")]
+    ExpectedLiteral(Kind),
+    #[error("Expected an identifier, but encountered {0:?}")]
+    ExpectedIdentifier(Kind),
+    #[error("Expected a literal or an identifier, but encountered {0:?}")]
+    ExpectedTerm(Kind),
+    #[error("Expected an operator, but encountered {0:?}")]
+    ExpectedOp(Kind),
+    #[error("Cannot parse {token:?} as a boolean")]
+    Bool {
+        token: String,
+        source: ParseBoolError,
+    },
+    #[error("Cannot parse {token:?} as an integer")]
+    Int {
+        token: String,
+        source: ParseIntError,
+    },
+}
 
 type Int = i64;
 
+#[derive(Debug)]
 pub enum Literal<'a> {
     Int(Int),
     Bool(bool),
@@ -16,40 +41,60 @@ pub enum Literal<'a> {
 }
 
 impl<'a> Literal<'a> {
-    pub fn parse(token: &Token, code: &'a str) -> Option<Self> {
+    pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Result<Self, Error> {
+        let code = tokens.code();
+        let token = tokens.peek(*at);
         match token.kind() {
-            Kind::Identifier => match token.as_str(code).parse::<bool>() {
-                Ok(boolean) => Some(Literal::Bool(boolean)),
-                Err(..) => None,
-            },
-            Kind::Integer => match token.as_str(code).parse::<Int>() {
-                Ok(i) => Some(Literal::Int(i)),
-                Err(..) => None,
-            },
-            Kind::StrLiteral => {
-                let unquoted = &token.as_str(code)[1..token.len() - 2];
-                Some(Literal::Str(unquoted))
+            Kind::Identifier | Kind::Integer | Kind::StrLiteral => {
+                let token = tokens.consume(at);
+                match token.kind() {
+                    Kind::Identifier => match token.as_str(code).parse::<bool>() {
+                        Ok(boolean) => Ok(Literal::Bool(boolean)),
+                        Err(source) => Err(Error::Bool {
+                            token: token.as_str(code).into(),
+                            source,
+                        }),
+                    },
+                    Kind::Integer => match token.as_str(code).parse::<Int>() {
+                        Ok(i) => Ok(Literal::Int(i)),
+                        Err(source) => Err(Error::Int {
+                            token: token.as_str(code).into(),
+                            source,
+                        }),
+                    },
+                    Kind::StrLiteral => {
+                        let unquoted = &token.as_str(code)[1..token.len() - 2];
+                        Ok(Literal::Str(unquoted))
+                    }
+                    _ => unreachable!(),
+                }
             }
-            _ => None,
+            kind => Err(Error::ExpectedLiteral(kind)),
         }
     }
 }
 
+#[derive(Debug)]
 pub struct Identifer<'a> {
     name: &'a str,
 }
 
 impl<'a> Identifer<'a> {
-    pub fn parse(token: &Token, code: &'a str) -> Option<Self> {
-        match token.kind() {
-            Kind::Identifier => Some(Self {
-                name: token.as_str(code),
-            }),
-            _ => None,
+    pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Result<Self, Error> {
+        let code = tokens.code();
+        let token = tokens.peek(*at);
+        if token.kind() != Kind::Identifier {
+            return Err(Error::ExpectedIdentifier(token.kind()));
         }
+
+        let token = tokens.consume(at);
+        Ok(Self {
+            name: &token.as_str(code),
+        })
     }
 }
 
+#[derive(Debug)]
 pub enum Op {
     Add,
     Sub,
@@ -58,90 +103,181 @@ pub enum Op {
 }
 
 impl Op {
-    pub fn parse(token: &Token, code: &str) -> Option<Self> {
-        match token.kind() {
-            Kind::Operator => match token.as_str(code) {
-                "+" => Some(Op::Add),
-                "-" => Some(Op::Sub),
-                "*" => Some(Op::Mul),
-                "/" => Some(Op::Div),
-                _ => None,
-            },
-            _ => None,
+    pub fn parse(tokens: &Tokens, at: &mut usize) -> Result<Self, Error> {
+        let code = tokens.code();
+        let token = tokens.peek(*at);
+        if token.kind() != Kind::Operator {
+            return Err(Error::ExpectedOp(token.kind()));
+        }
+
+        let token = tokens.consume(at);
+        match token.as_str(code) {
+            "+" => Ok(Op::Add),
+            "-" => Ok(Op::Sub),
+            "*" => Ok(Op::Mul),
+            "/" => Ok(Op::Div),
+            str => Err(Error::ExpectedOneOf {
+                of: vec!["+".into(), "-".into(), "*".into(), "/".into()],
+                token: str.into(),
+            }),
         }
     }
 }
 
+impl Display for Op {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Op::Add => '+',
+                Op::Sub => '-',
+                Op::Mul => '*',
+                Op::Div => '/',
+            }
+        )
+    }
+}
+
+#[derive(Debug)]
 pub struct BinaryOp<'a> {
     left: Box<Expression<'a>>,
     op: Op,
     right: Box<Expression<'a>>,
 }
 
-fn parse_term<'a>(token: &Token, code: &'a str) -> Option<Expression<'a>> {
-    if let Some(lit) = Literal::parse(token, code) {
-        Some(Expression::Literal(lit))
-    } else if let Some(id) = Identifer::parse(token, code) {
-        Some(Expression::Identifier(id))
-    } else {
-        None
-    }
-}
-
-impl<'a> BinaryOp<'a> {
-    pub fn parse(tokens: &[Token], code: &'a str) -> Option<(Self, usize)> {
-        match tokens {
-            [left, op, right, ..] => {
-                let left = Box::new(parse_term(left, code)?);
-                let op = Op::parse(op, code)?;
-                let right = Box::new(parse_term(right, code)?);
-                Some((Self { left, op, right }, 3))
-            }
-            _ => None,
-        }
-    }
-}
-
+#[derive(Debug)]
 pub enum Expression<'a> {
     Literal(Literal<'a>),
     Identifier(Identifer<'a>),
     BinaryOp(BinaryOp<'a>),
 }
 
-impl<'a> Expression<'a> {
-    pub fn parse_left(tokens: &[Token], code: &'a str) -> Option<Self> {
-        let Some(token) = tokens.first() else {
-            return None;
-        };
+macro_rules! start_trace {
+    ($config: expr, $ops: expr, $depth: expr) => {
+        if $config.verbose {
+            print!("\n{}Parse:", "  ".repeat($depth));
+        }
+    };
+}
 
-        let mut left = parse_term(token, code)?;
-        let mut n = 1;
-        while let Some(token) = tokens.get(n) {
-            let Some(op) = Op::parse(token, code) else {
-                break;
-            };
-            n += 1;
+macro_rules! trace {
+    ($config: expr, $tokens: expr, $at: expr) => {
+        if $config.verbose {
+            print!(" {}", $tokens.peek($at).as_str($tokens.code()));
+        }
+    };
+}
 
-            let Some(right) = tokens.get(n).and_then(|token| parse_term(token, code)) else {
-                break;
-            };
-            n += 1;
+macro_rules! end_trace {
+    ($config: expr) => {
+        if $config.verbose {
+            println!();
+        }
+    };
+}
 
-            left = Expression::BinaryOp(BinaryOp {
-                left: Box::new(left),
-                op,
-                right: Box::new(right),
-            });
+fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>, Error> {
+    if let Ok(lit) = Literal::parse(tokens, at) {
+        Ok(Expression::Literal(lit))
+    } else if let Ok(id) = Identifer::parse(tokens, at) {
+        Ok(Expression::Identifier(id))
+    } else {
+        Err(Error::ExpectedTerm(tokens.peek(*at).kind()))
+    }
+}
+
+fn parse_expression_left<'a>(
+    tokens: &'a Tokens<'_>,
+    at: &mut usize,
+    depth: usize,
+    config: &Config,
+    ops: &[&str],
+    parse_term_fn: impl Fn(&'a Tokens, &mut usize, usize) -> Result<Expression<'a>, Error>,
+) -> Result<Expression<'a>, Error> {
+    let code = tokens.code();
+
+    start_trace!(config, ops, depth);
+    trace!(config, tokens, *at);
+
+    // Accumulate tree into left
+    let mut left = parse_term_fn(tokens, at, depth + 1)?;
+
+    let result = loop {
+        if !ops.contains(&tokens.peek(*at).as_str(code)) {
+            break Ok(left);
         }
 
-        Some(left)
-    }
+        trace!(config, tokens, *at);
+
+        let op = match Op::parse(tokens, at) {
+            Ok(op) => op,
+            Err(e) => break Err(e),
+        };
+
+        trace!(config, tokens, *at);
+
+        let right = match parse_term_fn(tokens, at, depth + 1) {
+            Ok(expr) => expr,
+            Err(e) => break Err(e),
+        };
+
+        left = Expression::BinaryOp(BinaryOp {
+            left: Box::new(left),
+            op,
+            right: Box::new(right),
+        });
+    };
+
+    end_trace!(config);
+
+    result
+}
+
+fn parse_expression<'a>(tokens: &'a Tokens<'_>, config: &Config) -> Result<Expression<'a>, Error> {
+    let mut at = 0;
+    parse_expression_left(
+        tokens,
+        &mut at,
+        0,
+        config,
+        &["+", "-"],
+        |tokens, at, depth| {
+            parse_expression_left(tokens, at, depth, config, &["*", "/"], |tokens, at, _| {
+                parse_factor(tokens, at)
+            })
+        },
+        // TODO: why is depth wrong in trace?
+    )
 }
 
 pub struct Ast<'a> {
     root: Expression<'a>,
 }
 
+impl Tokens<'_> {
+    fn consume(&self, at: &mut usize) -> Token {
+        let token = self.peek(*at);
+        *at += 1;
+        token
+    }
+
+    fn consume_one_of(&self, at: &mut usize, expected: &[&str]) -> Result<Token, Error> {
+        let token = self.peek(*at);
+        let fragment = token.as_str(self.code());
+        if !expected.contains(&fragment) {
+            return Err(Error::ExpectedOneOf {
+                of: expected.iter().map(|&s| String::from(s)).collect(),
+                token: String::from(fragment),
+            });
+        }
+        *at += 1;
+        Ok(token)
+    }
+}
+
 pub fn parse<'a>(tokens: &'a Tokens, config: &Config) -> Result<Ast<'a>, Error> {
-    todo!()
+    let root = parse_expression(tokens, config)?;
+    dbg!(&root);
+    Ok(Ast { root })
 }
