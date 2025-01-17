@@ -32,6 +32,10 @@ impl Token {
         &code[self.location.start()..self.location.end()]
     }
 
+    pub fn len(&self) -> usize {
+        self.location.end() - self.location.start()
+    }
+
     pub fn kind(&self) -> Kind {
         self.kind
     }

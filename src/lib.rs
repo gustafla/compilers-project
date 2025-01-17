@@ -1,4 +1,5 @@
 mod location;
+mod parser;
 mod tokenizer;
 
 use clap::Args;
@@ -22,6 +23,8 @@ impl Default for Config {
 pub enum Error {
     #[error("Could not tokenize input")]
     Tokenize(#[from] tokenizer::Error),
+    #[error("Could not parse token list")]
+    Parse(#[from] parser::Error),
 }
 
 pub fn print_error(mut error: &dyn std::error::Error) {
@@ -35,5 +38,6 @@ pub fn print_error(mut error: &dyn std::error::Error) {
 #[expect(unused_variables, reason = "Unimplemented")]
 pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
     let tokens = tokenizer::tokenize(code, config)?;
+    let ast = parser::parse(&tokens, config)?;
     todo!()
 }
