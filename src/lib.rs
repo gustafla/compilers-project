@@ -1,6 +1,8 @@
+mod location;
 mod tokenizer;
 
 use clap::Args;
+pub use location::Location;
 use thiserror::Error;
 
 #[derive(Args, Debug)]

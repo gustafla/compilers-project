@@ -200,12 +200,79 @@ fn tokenizer_line_numbers() {
         ]
     );
 
-    assert_eq!(tokens[0].line(code), 1);
-    assert_eq!(tokens[1].line(code), 1);
-    assert_eq!(tokens[2].line(code), 1);
-    assert_eq!(tokens[3].line(code), 2);
-    assert_eq!(tokens[4].line(code), 3);
-    assert_eq!(tokens[5].line(code), 4);
-    assert_eq!(tokens[6].line(code), 5);
-    assert_eq!(tokens[7].line(code), 8);
+    assert_eq!(tokens[0].location().line(code), 1);
+    assert_eq!(tokens[1].location().line(code), 1);
+    assert_eq!(tokens[2].location().line(code), 1);
+    assert_eq!(tokens[3].location().line(code), 2);
+    assert_eq!(tokens[4].location().line(code), 3);
+    assert_eq!(tokens[5].location().line(code), 4);
+    assert_eq!(tokens[6].location().line(code), 5);
+    assert_eq!(tokens[7].location().line(code), 8);
+}
+
+#[test]
+fn tokenizer_column_numbers() {
+    let code = r#"int main(int argc, char **argv) {
+    printf("Hello World!");
+    return 0;
+}"#;
+    let tokens = tokenize(code, &Default::default()).unwrap();
+
+    let columns: Vec<usize> = tokens.iter().map(|t| t.location().column(code)).collect();
+
+    assert_eq!(
+        columns,
+        &[
+            1,  // int
+            5,  // main
+            9,  // (
+            10, // int
+            14, // argc
+            18, // ,
+            20, // char
+            25, // *
+            26, // *
+            27, // argv
+            31, // )
+            33, // {
+            5,  // printf
+            11, // (
+            12, // "Hello World!"
+            26, // )
+            27, // ;
+            5,  // return
+            12, // 0
+            13, // ;
+            1,  // }
+        ]
+    );
+
+    let lines: Vec<usize> = tokens.iter().map(|t| t.location().line(code)).collect();
+
+    assert_eq!(
+        lines,
+        &[
+            1, // int
+            1, // main
+            1, // (
+            1, // int
+            1, // argc
+            1, // ,
+            1, // char
+            1, // *
+            1, // *
+            1, // argv
+            1, // )
+            1, // {
+            2, // printf
+            2, // (
+            2, // "Hello World!"
+            2, // )
+            2, // ;
+            3, // return
+            3, // 0
+            3, // ;
+            4, // }
+        ]
+    );
 }

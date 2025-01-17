@@ -1,12 +1,9 @@
 mod exercises;
 mod tests;
 
-use crate::Config;
+use crate::{Config, Location};
 use regex::Regex;
-use std::{
-    ops::{Index, Range},
-    sync::LazyLock,
-};
+use std::{ops::Index, slice, sync::LazyLock};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -25,23 +22,6 @@ pub enum Kind {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Location(Range<usize>);
-
-impl Location {
-    pub fn line(&self, code: &str) -> usize {
-        count_line_terminators(&code[..self.0.start]) + 1
-    }
-
-    pub fn start(&self) -> usize {
-        self.0.start
-    }
-
-    pub fn end(&self) -> usize {
-        self.0.end
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
 pub struct Token {
     kind: Kind,
     location: Location,
@@ -52,8 +32,12 @@ impl Token {
         &code[self.location.start()..self.location.end()]
     }
 
-    pub fn line(&self, code: &str) -> usize {
-        self.location.line(code)
+    pub fn kind(&self) -> Kind {
+        self.kind
+    }
+
+    pub fn location(&self) -> &Location {
+        &self.location
     }
 }
 
@@ -66,6 +50,10 @@ pub struct Tokens<'a> {
 impl Tokens<'_> {
     pub fn tokens(&self) -> &[Token] {
         &self.tokens
+    }
+
+    pub fn iter(&self) -> slice::Iter<Token> {
+        self.tokens().iter()
     }
 
     pub fn get(&self, index: usize) -> Option<&Token> {
@@ -83,16 +71,6 @@ impl Index<usize> for Tokens<'_> {
     fn index(&self, index: usize) -> &Self::Output {
         &self.tokens[index]
     }
-}
-
-#[allow(
-    clippy::unwrap_used,
-    reason = "Regular expressions compiled from literals"
-)]
-static LINE_TERMINATOR: LazyLock<Regex> = LazyLock::new(|| Regex::new("(?:\r\n|\n)").unwrap());
-
-fn count_line_terminators(fragment: &str) -> usize {
-    LINE_TERMINATOR.find_iter(fragment).count()
 }
 
 macro_rules! regex_array{
@@ -171,7 +149,7 @@ pub fn tokenize<'a>(code: &'a str, config: &Config) -> Result<Tokens<'a>, Error>
             if let Some(kind) = *kind {
                 tokens.push(Token {
                     kind,
-                    location: Location(at..at + mat.end()),
+                    location: (at..at + mat.end()).into(),
                 });
             }
 
