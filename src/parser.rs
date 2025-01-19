@@ -1,3 +1,5 @@
+#![expect(dead_code, reason = "Work in progress")]
+
 mod tests;
 
 use crate::{
@@ -89,7 +91,7 @@ impl<'a> Identifer<'a> {
 
         let token = tokens.consume(at);
         Ok(Self {
-            name: &token.as_str(code),
+            name: token.as_str(code),
         })
     }
 }

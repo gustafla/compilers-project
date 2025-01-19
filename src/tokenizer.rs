@@ -137,7 +137,7 @@ static REGULAR_EXPRESSIONS: LazyLock<[(Regex, Option<Kind>); 8]> = LazyLock::new
     ]
 });
 
-pub fn tokenize<'a>(code: &'a str) -> Result<Tokens<'a>, Error> {
+pub fn tokenize(code: &str) -> Result<Tokens<'_>, Error> {
     let mut tokens = Vec::new();
     let mut at: usize = 0;
 
