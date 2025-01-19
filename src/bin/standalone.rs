@@ -43,7 +43,11 @@ fn main() {
         cli.files.pop().unwrap()
     };
 
-    let code = match fs::read_to_string(&input) {
+    let code = match if input == Path::new("-") {
+        io::read_to_string(io::stdin().lock())
+    } else {
+        fs::read_to_string(&input)
+    } {
         Ok(code) => code,
         Err(ref e) => err!(e),
     };
