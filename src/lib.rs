@@ -1,23 +1,13 @@
+mod config;
 mod location;
 mod parser;
 mod tokenizer;
+mod trace;
 
-use clap::Args;
+pub use config::Config;
 pub use location::Location;
+
 use thiserror::Error;
-
-#[derive(Args, Debug)]
-pub struct Config {
-    #[arg(short, long, global = true)]
-    pub verbose: bool,
-}
-
-#[cfg(test)]
-impl Default for Config {
-    fn default() -> Self {
-        Self { verbose: true }
-    }
-}
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -37,7 +27,8 @@ pub fn print_error(mut error: &dyn std::error::Error) {
 
 #[expect(unused_variables, reason = "Unimplemented")]
 pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
-    let tokens = tokenizer::tokenize(code, config)?;
-    let ast = parser::parse(&tokens, config)?;
+    config::configure(config.clone()); // TODO: this thread_local "global" stinks
+    let tokens = tokenizer::tokenize(code)?;
+    let ast = parser::parse(&tokens)?;
     todo!()
 }

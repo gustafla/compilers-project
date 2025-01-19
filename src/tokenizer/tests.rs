@@ -27,7 +27,7 @@ impl PartialEq<&[(&str, Kind)]> for Tokens<'_> {
 #[test]
 fn tokenizer_basics() {
     let code = r#"while 1 + 11*123"#;
-    let tokens = tokenize(code, &Default::default()).unwrap();
+    let tokens = tokenize(code).unwrap();
     assert_eq!(
         tokens,
         &[
@@ -40,7 +40,7 @@ fn tokenizer_basics() {
         ]
     );
     let code = r#"0012-0x"#;
-    let tokens = tokenize(code, &Default::default()).unwrap();
+    let tokens = tokenize(code).unwrap();
     assert_eq!(
         tokens,
         &[
@@ -55,14 +55,14 @@ fn tokenizer_basics() {
 #[test]
 fn tokenizer_unrecognized() {
     let code = "$";
-    let result = tokenize(code, &Default::default());
+    let result = tokenize(code);
     assert!(matches!(result, Err(Error::NoMatch(_))));
 }
 
 #[test]
 fn tokenizer_operators() {
     let code = "+-*/===!=<<=>>=";
-    let tokens = tokenize(code, &Default::default()).unwrap();
+    let tokens = tokenize(code).unwrap();
     assert_eq!(
         tokens,
         &[
@@ -87,7 +87,7 @@ fn tokenizer_punctuation() {
     printf("Hello World!");
     return 0;
 }"#;
-    let tokens = tokenize(code, &Default::default()).unwrap();
+    let tokens = tokenize(code).unwrap();
     assert_eq!(
         tokens,
         &[
@@ -120,7 +120,7 @@ fn tokenizer_punctuation() {
 fn tokenizer_comment() {
     let code = r#"while 1 do // This is a comment
     thing"#;
-    let tokens = tokenize(code, &Default::default()).unwrap();
+    let tokens = tokenize(code).unwrap();
     assert_eq!(
         tokens,
         &[
@@ -132,7 +132,7 @@ fn tokenizer_comment() {
     );
 
     let code = r#"while 1 do /* This is a comment */ rust"#;
-    let tokens = tokenize(code, &Default::default()).unwrap();
+    let tokens = tokenize(code).unwrap();
     assert_eq!(
         tokens,
         &[
@@ -145,7 +145,7 @@ fn tokenizer_comment() {
 
     let code = r#"while 1 do /* This is a comment
     also this*/ rust"#;
-    let tokens = tokenize(code, &Default::default()).unwrap();
+    let tokens = tokenize(code).unwrap();
     assert_eq!(
         tokens,
         &[
@@ -158,7 +158,7 @@ fn tokenizer_comment() {
 
     let code = r#"/**/while 1 do/*This is a comment
 also this*/rust#wow"#;
-    let tokens = tokenize(code, &Default::default()).unwrap();
+    let tokens = tokenize(code).unwrap();
     assert_eq!(
         tokens,
         &[
@@ -171,7 +171,7 @@ also this*/rust#wow"#;
 
     let code = r#"//
 rust//wow"#;
-    let tokens = tokenize(code, &Default::default()).unwrap();
+    let tokens = tokenize(code).unwrap();
     assert_eq!(tokens, &[("rust", Kind::Identifier)]);
 }
 
@@ -185,7 +185,7 @@ fn tokenizer_line_numbers() {
     thing5
     thing6
 */last"#;
-    let tokens = tokenize(code, &Default::default()).unwrap();
+    let tokens = tokenize(code).unwrap();
     assert_eq!(
         tokens,
         &[
@@ -216,7 +216,7 @@ fn tokenizer_column_numbers() {
     printf("Hello World!");
     return 0;
 }"#;
-    let tokens = tokenize(code, &Default::default()).unwrap();
+    let tokens = tokenize(code).unwrap();
 
     let columns: Vec<usize> = tokens.iter().map(|t| t.location().column(code)).collect();
 

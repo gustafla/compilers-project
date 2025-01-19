@@ -2,7 +2,7 @@ mod tests;
 
 use crate::{
     tokenizer::{Kind, Token, Tokens},
-    Config,
+    trace::{end_trace, start_trace, trace},
 };
 use std::{fmt::Display, num::ParseIntError, str::ParseBoolError};
 use thiserror::Error;
@@ -153,30 +153,6 @@ pub enum Expression<'a> {
     BinaryOp(BinaryOp<'a>),
 }
 
-macro_rules! start_trace {
-    ($config: expr, $ops: expr, $depth: expr) => {
-        if $config.verbose {
-            print!("\n{}Parse:", "  ".repeat($depth));
-        }
-    };
-}
-
-macro_rules! trace {
-    ($config: expr, $tokens: expr, $at: expr) => {
-        if $config.verbose {
-            print!(" {}", $tokens.peek($at).as_str($tokens.code()));
-        }
-    };
-}
-
-macro_rules! end_trace {
-    ($config: expr) => {
-        if $config.verbose {
-            println!();
-        }
-    };
-}
-
 fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>, Error> {
     if let Ok(lit) = Literal::parse(tokens, at) {
         Ok(Expression::Literal(lit))
@@ -187,18 +163,23 @@ fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>
     }
 }
 
+macro_rules! token_str {
+    ($tokens: expr, $at: expr) => {
+        $tokens.peek($at).as_str($tokens.code())
+    };
+}
+
 fn parse_expression_left<'a>(
     tokens: &'a Tokens<'_>,
     at: &mut usize,
     depth: usize,
-    config: &Config,
     ops: &[&str],
     parse_term_fn: impl Fn(&'a Tokens, &mut usize, usize) -> Result<Expression<'a>, Error>,
 ) -> Result<Expression<'a>, Error> {
     let code = tokens.code();
 
-    start_trace!(config, ops, depth);
-    trace!(config, tokens, *at);
+    start_trace!("Parser", depth);
+    trace!(token_str!(tokens, *at));
 
     // Accumulate tree into left
     let mut left = parse_term_fn(tokens, at, depth + 1)?;
@@ -208,14 +189,14 @@ fn parse_expression_left<'a>(
             break Ok(left);
         }
 
-        trace!(config, tokens, *at);
+        trace!(token_str!(tokens, *at));
 
         let op = match Op::parse(tokens, at) {
             Ok(op) => op,
             Err(e) => break Err(e),
         };
 
-        trace!(config, tokens, *at);
+        trace!(token_str!(tokens, *at));
 
         let right = match parse_term_fn(tokens, at, depth + 1) {
             Ok(expr) => expr,
@@ -229,21 +210,20 @@ fn parse_expression_left<'a>(
         });
     };
 
-    end_trace!(config);
+    end_trace!();
 
     result
 }
 
-fn parse_expression<'a>(tokens: &'a Tokens<'_>, config: &Config) -> Result<Expression<'a>, Error> {
+fn parse_expression<'a>(tokens: &'a Tokens<'_>) -> Result<Expression<'a>, Error> {
     let mut at = 0;
     parse_expression_left(
         tokens,
         &mut at,
         0,
-        config,
         &["+", "-"],
         |tokens, at, depth| {
-            parse_expression_left(tokens, at, depth, config, &["*", "/"], |tokens, at, _| {
+            parse_expression_left(tokens, at, depth, &["*", "/"], |tokens, at, _| {
                 parse_factor(tokens, at)
             })
         },
@@ -276,8 +256,8 @@ impl Tokens<'_> {
     }
 }
 
-pub fn parse<'a>(tokens: &'a Tokens, config: &Config) -> Result<Ast<'a>, Error> {
-    let root = parse_expression(tokens, config)?;
+pub fn parse<'a>(tokens: &'a Tokens) -> Result<Ast<'a>, Error> {
+    let root = parse_expression(tokens)?;
     dbg!(&root);
     Ok(Ast { root })
 }

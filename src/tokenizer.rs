@@ -1,12 +1,13 @@
 mod exercises;
 mod tests;
 
-use crate::{Config, Location};
+use crate::{
+    trace::{end_trace, start_trace, trace},
+    Location,
+};
 use regex::Regex;
 use std::{
-    borrow::Cow,
     ops::{Deref, Index},
-    slice,
     sync::LazyLock,
 };
 use thiserror::Error;
@@ -136,13 +137,11 @@ static REGULAR_EXPRESSIONS: LazyLock<[(Regex, Option<Kind>); 8]> = LazyLock::new
     ]
 });
 
-pub fn tokenize<'a>(code: &'a str, config: &Config) -> Result<Tokens<'a>, Error> {
+pub fn tokenize<'a>(code: &'a str) -> Result<Tokens<'a>, Error> {
     let mut tokens = Vec::new();
     let mut at: usize = 0;
 
-    if config.verbose {
-        eprintln!("Tokenizer: ");
-    }
+    start_trace!("Tokenizer", 0);
 
     let result = 'outer: loop {
         let rest = &code[at..];
@@ -165,10 +164,7 @@ pub fn tokenize<'a>(code: &'a str, config: &Config) -> Result<Tokens<'a>, Error>
                 assert_eq!(mat.start(), 0);
             }
 
-            // Debug print
-            if config.verbose {
-                eprint!("{}", mat.as_str());
-            }
+            trace!(mat.as_str());
 
             // Store the match
             if let Some(kind) = *kind {
@@ -188,9 +184,7 @@ pub fn tokenize<'a>(code: &'a str, config: &Config) -> Result<Tokens<'a>, Error>
         break Err(Error::NoMatch(rest[..rest.len().min(12)].to_owned()));
     };
 
-    if config.verbose {
-        eprintln!();
-    }
+    end_trace!();
 
     result
 }
