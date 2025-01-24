@@ -113,6 +113,35 @@ fn parse_expression_precedence() {
 }
 
 #[test]
+fn parse_expression_paren() {
+    let code = "1+(2+3)";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        Ast {
+            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                left: Ast {
+                    tree: Box::new(Expression::Literal(Literal::Int(1)))
+                },
+                op: Op::Add,
+                right: Ast {
+                    tree: Box::new(Expression::BinaryOp(BinaryOp {
+                        left: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(2)))
+                        },
+                        op: Op::Add,
+                        right: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(3)))
+                        },
+                    }))
+                },
+            }))
+        }
+    );
+}
+
+#[test]
 fn parse_expression_with_literals() {
     let code = "a+b*c";
     let tokens = tokenizer::tokenize(code).unwrap();

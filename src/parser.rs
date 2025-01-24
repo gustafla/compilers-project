@@ -161,14 +161,31 @@ pub struct Ast<'a> {
     tree: Box<Expression<'a>>,
 }
 
-fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>, Error> {
-    if let Ok(lit) = Literal::parse(tokens, at) {
+fn parse_factor<'a>(
+    tokens: &'a Tokens,
+    at: &mut usize,
+    depth: usize,
+) -> Result<Expression<'a>, Error> {
+    if tokens.peek(*at).as_str(tokens.code()) == "(" {
+        parse_parenthesized(tokens, at, depth)
+    } else if let Ok(lit) = Literal::parse(tokens, at) {
         Ok(Expression::Literal(lit))
     } else if let Ok(id) = Identifer::parse(tokens, at) {
         Ok(Expression::Identifier(id))
     } else {
         Err(Error::ExpectedTerm(tokens.peek(*at).kind()))
     }
+}
+
+fn parse_parenthesized<'a>(
+    tokens: &'a Tokens,
+    at: &mut usize,
+    depth: usize,
+) -> Result<Expression<'a>, Error> {
+    tokens.consume_one_of(at, &["("])?;
+    let expr = parse_expression(tokens, at, depth + 1);
+    tokens.consume_one_of(at, &[")"])?;
+    expr
 }
 
 macro_rules! token_str {
@@ -237,11 +254,7 @@ fn parse_expression<'a>(
         at,
         depth,
         &["+", "-"],
-        |tokens, at, depth| {
-            parse_expression_left(tokens, at, depth, &["*", "/"], |tokens, at, _| {
-                parse_factor(tokens, at)
-            })
-        },
+        |tokens, at, depth| parse_expression_left(tokens, at, depth, &["*", "/"], parse_factor),
         // TODO: why is depth wrong in trace?
     )
 }
