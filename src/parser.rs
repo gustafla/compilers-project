@@ -35,7 +35,7 @@ pub enum Error {
 
 type Int = i64;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Literal<'a> {
     Int(Int),
     Bool(bool),
@@ -76,7 +76,7 @@ impl<'a> Literal<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Identifer<'a> {
     name: &'a str,
 }
@@ -96,7 +96,7 @@ impl<'a> Identifer<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Op {
     Add,
     Sub,
