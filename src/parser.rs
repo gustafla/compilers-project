@@ -217,12 +217,15 @@ fn parse_expression_left<'a>(
     result
 }
 
-fn parse_expression<'a>(tokens: &'a Tokens<'_>) -> Result<Expression<'a>, Error> {
-    let mut at = 0;
+fn parse_expression<'a>(
+    tokens: &'a Tokens<'_>,
+    at: &mut usize,
+    depth: usize,
+) -> Result<Expression<'a>, Error> {
     parse_expression_left(
         tokens,
-        &mut at,
-        0,
+        at,
+        depth,
         &["+", "-"],
         |tokens, at, depth| {
             parse_expression_left(tokens, at, depth, &["*", "/"], |tokens, at, _| {
@@ -233,6 +236,7 @@ fn parse_expression<'a>(tokens: &'a Tokens<'_>) -> Result<Expression<'a>, Error>
     )
 }
 
+#[derive(Debug)]
 pub struct Ast<'a> {
     root: Expression<'a>,
 }
@@ -259,7 +263,8 @@ impl Tokens<'_> {
 }
 
 pub fn parse<'a>(tokens: &'a Tokens) -> Result<Ast<'a>, Error> {
-    let root = parse_expression(tokens)?;
+    let mut at = 0;
+    let root = parse_expression(tokens, &mut at, 0)?;
     dbg!(&root);
     Ok(Ast { root })
 }
