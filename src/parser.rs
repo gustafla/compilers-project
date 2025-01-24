@@ -1,4 +1,4 @@
-#![expect(dead_code, reason = "Work in progress")]
+#![cfg_attr(not(test), expect(dead_code, reason = "Work in progress"))]
 
 mod tests;
 
@@ -183,7 +183,7 @@ fn parse_parenthesized<'a>(
     depth: usize,
 ) -> Result<Expression<'a>, Error> {
     tokens.consume_one_of(at, &["("])?;
-    let expr = parse_expression(tokens, at, depth + 1);
+    let expr = parse_expression(tokens, at, depth);
     tokens.consume_one_of(at, &[")"])?;
     expr
 }
