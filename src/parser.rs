@@ -143,9 +143,9 @@ impl Display for Op {
 
 #[derive(Debug)]
 pub struct BinaryOp<'a> {
-    left: Box<Expression<'a>>,
+    left: Ast<'a>,
     op: Op,
-    right: Box<Expression<'a>>,
+    right: Ast<'a>,
 }
 
 #[derive(Debug)]
@@ -153,6 +153,12 @@ pub enum Expression<'a> {
     Literal(Literal<'a>),
     Identifier(Identifer<'a>),
     BinaryOp(BinaryOp<'a>),
+}
+
+#[derive(Debug)]
+pub struct Ast<'a> {
+    // location: Location,
+    tree: Box<Expression<'a>>,
 }
 
 fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>, Error> {
@@ -206,9 +212,13 @@ fn parse_expression_left<'a>(
         };
 
         left = Expression::BinaryOp(BinaryOp {
-            left: Box::new(left),
+            left: Ast {
+                tree: Box::new(left),
+            },
             op,
-            right: Box::new(right),
+            right: Ast {
+                tree: Box::new(right),
+            },
         });
     };
 
@@ -236,11 +246,6 @@ fn parse_expression<'a>(
     )
 }
 
-#[derive(Debug)]
-pub struct Ast<'a> {
-    root: Expression<'a>,
-}
-
 impl Tokens<'_> {
     fn consume(&self, at: &mut usize) -> Token {
         let token = self.peek(*at);
@@ -266,5 +271,7 @@ pub fn parse<'a>(tokens: &'a Tokens) -> Result<Ast<'a>, Error> {
     let mut at = 0;
     let root = parse_expression(tokens, &mut at, 0)?;
     dbg!(&root);
-    Ok(Ast { root })
+    Ok(Ast {
+        tree: Box::new(root),
+    })
 }

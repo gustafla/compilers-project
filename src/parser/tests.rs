@@ -24,7 +24,7 @@ impl PartialEq for Expression<'_> {
 
 impl PartialEq for Ast<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.root.eq(&other.root)
+        self.tree.eq(&other.tree)
     }
 }
 
@@ -36,11 +36,15 @@ fn parse_expression_basic() {
     assert_eq!(
         expression,
         Ast {
-            root: Expression::BinaryOp(BinaryOp {
-                left: Box::new(Expression::Literal(Literal::Int(1))),
+            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                left: Ast {
+                    tree: Box::new(Expression::Literal(Literal::Int(1)))
+                },
                 op: Op::Add,
-                right: Box::new(Expression::Literal(Literal::Int(1))),
-            })
+                right: Ast {
+                    tree: Box::new(Expression::Literal(Literal::Int(1)))
+                },
+            }))
         }
     );
 }
@@ -61,15 +65,23 @@ fn parse_expression_precedence() {
     assert_eq!(
         expression,
         Ast {
-            root: Expression::BinaryOp(BinaryOp {
-                left: Box::new(Expression::BinaryOp(BinaryOp {
-                    left: Box::new(Expression::Literal(Literal::Int(1))),
-                    op: Op::Add,
-                    right: Box::new(Expression::Literal(Literal::Int(2))),
-                })),
+            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                left: Ast {
+                    tree: Box::new(Expression::BinaryOp(BinaryOp {
+                        left: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(1)))
+                        },
+                        op: Op::Add,
+                        right: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(2)))
+                        },
+                    }))
+                },
                 op: Op::Add,
-                right: Box::new(Expression::Literal(Literal::Int(3))),
-            })
+                right: Ast {
+                    tree: Box::new(Expression::Literal(Literal::Int(3)))
+                },
+            }))
         }
     );
 
@@ -79,15 +91,23 @@ fn parse_expression_precedence() {
     assert_eq!(
         expression,
         Ast {
-            root: Expression::BinaryOp(BinaryOp {
-                left: Box::new(Expression::Literal(Literal::Int(1))),
+            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                left: Ast {
+                    tree: Box::new(Expression::Literal(Literal::Int(1)))
+                },
                 op: Op::Add,
-                right: Box::new(Expression::BinaryOp(BinaryOp {
-                    left: Box::new(Expression::Literal(Literal::Int(2))),
-                    op: Op::Mul,
-                    right: Box::new(Expression::Literal(Literal::Int(3))),
-                })),
-            })
+                right: Ast {
+                    tree: Box::new(Expression::BinaryOp(BinaryOp {
+                        left: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(2)))
+                        },
+                        op: Op::Mul,
+                        right: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(3)))
+                        },
+                    }))
+                },
+            }))
         }
     );
 }
@@ -100,15 +120,23 @@ fn parse_expression_with_literals() {
     assert_eq!(
         expression,
         Ast {
-            root: Expression::BinaryOp(BinaryOp {
-                left: Box::new(Expression::Identifier(Identifer { name: "a" })),
+            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                left: Ast {
+                    tree: Box::new(Expression::Identifier(Identifer { name: "a" }))
+                },
                 op: Op::Add,
-                right: Box::new(Expression::BinaryOp(BinaryOp {
-                    left: Box::new(Expression::Identifier(Identifer { name: "b" })),
-                    op: Op::Mul,
-                    right: Box::new(Expression::Identifier(Identifer { name: "c" })),
-                })),
-            })
+                right: Ast {
+                    tree: Box::new(Expression::BinaryOp(BinaryOp {
+                        left: Ast {
+                            tree: Box::new(Expression::Identifier(Identifer { name: "b" }))
+                        },
+                        op: Op::Mul,
+                        right: Ast {
+                            tree: Box::new(Expression::Identifier(Identifer { name: "c" }))
+                        },
+                    }))
+                },
+            }))
         }
     );
 }
