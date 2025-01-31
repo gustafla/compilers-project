@@ -142,7 +142,7 @@ fn parse_expression_paren() {
 }
 
 #[test]
-fn parse_expression_with_literals() {
+fn parse_expression_with_identifiers() {
     let code = "a+b*c";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();

@@ -21,6 +21,8 @@ pub enum Error {
     ExpectedTerm(Kind),
     #[error("Expected an operator, but encountered {0:?}")]
     ExpectedOp(Kind),
+    #[error("Unexpected {0:?} (expected EOF)")]
+    ExpectedEnd(Kind),
     #[error("Cannot parse {token:?} as a boolean")]
     Bool {
         token: String,
@@ -46,33 +48,33 @@ impl<'a> Literal<'a> {
     pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Result<Self, Error> {
         let code = tokens.code();
         let token = tokens.peek(*at);
-        match token.kind() {
-            Kind::Identifier | Kind::Integer | Kind::StrLiteral => {
-                let token = tokens.consume(at);
-                match token.kind() {
-                    Kind::Identifier => match token.as_str(code).parse::<bool>() {
-                        Ok(boolean) => Ok(Literal::Bool(boolean)),
-                        Err(source) => Err(Error::Bool {
-                            token: token.as_str(code).into(),
-                            source,
-                        }),
-                    },
-                    Kind::Integer => match token.as_str(code).parse::<Int>() {
-                        Ok(i) => Ok(Literal::Int(i)),
-                        Err(source) => Err(Error::Int {
-                            token: token.as_str(code).into(),
-                            source,
-                        }),
-                    },
-                    Kind::StrLiteral => {
-                        let unquoted = &token.as_str(code)[1..token.len() - 2];
-                        Ok(Literal::Str(unquoted))
-                    }
-                    _ => unreachable!(),
+        let literal = match token.kind() {
+            Kind::Identifier => match token.as_str(code).parse::<bool>() {
+                Ok(boolean) => Literal::Bool(boolean),
+                Err(source) => {
+                    return Err(Error::Bool {
+                        token: token.as_str(code).into(),
+                        source,
+                    })
                 }
+            },
+            Kind::Integer => match token.as_str(code).parse::<Int>() {
+                Ok(i) => Literal::Int(i),
+                Err(source) => {
+                    return Err(Error::Int {
+                        token: token.as_str(code).into(),
+                        source,
+                    })
+                }
+            },
+            Kind::StrLiteral => {
+                let unquoted = &token.as_str(code)[1..token.len() - 2];
+                Literal::Str(unquoted)
             }
-            kind => Err(Error::ExpectedLiteral(kind)),
-        }
+            kind => return Err(Error::ExpectedLiteral(kind)),
+        };
+        let _ = tokens.consume(at);
+        Ok(literal)
     }
 }
 
@@ -283,6 +285,12 @@ impl Tokens<'_> {
 pub fn parse<'a>(tokens: &'a Tokens) -> Result<Ast<'a>, Error> {
     let mut at = 0;
     let root = parse_expression(tokens, &mut at, 0)?;
+
+    let kind = tokens.peek(at).kind();
+    if kind != Kind::End {
+        return Err(Error::ExpectedEnd(kind));
+    }
+
     dbg!(&root);
     Ok(Ast {
         tree: Box::new(root),
