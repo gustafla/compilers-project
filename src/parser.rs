@@ -21,6 +21,8 @@ pub enum Error {
     ExpectedTerm(Kind),
     #[error("Expected an operator, but encountered {0:?}")]
     ExpectedOp(Kind),
+    #[error("Expected keyword `{0}`, but encountered {1:?}")]
+    ExpectedKeyword(String, Kind),
     #[error("Unexpected {0:?} (expected EOF)")]
     ExpectedEnd(Kind),
     #[error("Cannot parse {token:?} as a boolean")]
@@ -45,36 +47,31 @@ pub enum Literal<'a> {
 }
 
 impl<'a> Literal<'a> {
-    pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Result<Self, Error> {
+    pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
         let code = tokens.code();
         let token = tokens.peek(*at);
-        let literal = match token.kind() {
+
+        let result = match token.kind() {
             Kind::Identifier => match token.as_str(code).parse::<bool>() {
-                Ok(boolean) => Literal::Bool(boolean),
-                Err(source) => {
-                    return Err(Error::Bool {
-                        token: token.as_str(code).into(),
-                        source,
-                    })
-                }
+                Ok(boolean) => Ok(Literal::Bool(boolean)),
+                Err(..) => return None, // No error, there are other identifiers than true and false
             },
             Kind::Integer => match token.as_str(code).parse::<Int>() {
-                Ok(i) => Literal::Int(i),
-                Err(source) => {
-                    return Err(Error::Int {
-                        token: token.as_str(code).into(),
-                        source,
-                    })
-                }
+                Ok(i) => Ok(Literal::Int(i)),
+                Err(source) => Err(Error::Int {
+                    token: token.as_str(code).into(),
+                    source,
+                }),
             },
             Kind::StrLiteral => {
                 let unquoted = &token.as_str(code)[1..token.len() - 2];
-                Literal::Str(unquoted)
+                // TODO: Process escape syntax like \"\" and \\
+                Ok(Literal::Str(unquoted))
             }
-            kind => return Err(Error::ExpectedLiteral(kind)),
+            _ => return None,
         };
         let _ = tokens.consume(at);
-        Ok(literal)
+        Some(result)
     }
 }
 
@@ -84,15 +81,15 @@ pub struct Identifer<'a> {
 }
 
 impl<'a> Identifer<'a> {
-    pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Result<Self, Error> {
+    pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Self> {
         let code = tokens.code();
         let token = tokens.peek(*at);
         if token.kind() != Kind::Identifier {
-            return Err(Error::ExpectedIdentifier(token.kind()));
+            return None;
         }
 
         let token = tokens.consume(at);
-        Ok(Self {
+        Some(Self {
             name: token.as_str(code),
         })
     }
@@ -151,10 +148,74 @@ pub struct BinaryOp<'a> {
 }
 
 #[derive(Debug)]
+pub struct Conditional<'a> {
+    condition: Ast<'a>,
+    then_expr: Ast<'a>,
+    else_expr: Option<Ast<'a>>,
+}
+
+impl<'a> Conditional<'a> {
+    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+        let code = tokens.code();
+
+        // If
+        let token = tokens.peek(*at);
+        if token.kind() != Kind::Identifier || token.as_str(code) != "if" {
+            return None;
+        }
+        tokens.consume(at);
+
+        // <condition>
+        let condition = match parse_expression(tokens, at) {
+            Ok(expr) => Ast {
+                tree: Box::new(expr),
+            },
+            Err(e) => return Some(Err(e)),
+        };
+
+        // Then
+        let token = tokens.consume(at);
+        if token.kind() != Kind::Identifier || token.as_str(code) != "then" {
+            return Some(Err(Error::ExpectedKeyword("then".into(), token.kind())));
+        }
+
+        // <then>
+        let then_expr = match parse_expression(tokens, at) {
+            Ok(expr) => Ast {
+                tree: Box::new(expr),
+            },
+            Err(e) => return Some(Err(e)),
+        };
+
+        // Else
+        let token = tokens.peek(*at);
+        let else_expr = if token.kind() == Kind::Identifier || token.as_str(code) == "else" {
+            // <else>
+            tokens.consume(at);
+            match parse_expression(tokens, at) {
+                Ok(expr) => Some(Ast {
+                    tree: Box::new(expr),
+                }),
+                Err(e) => return Some(Err(e)),
+            }
+        } else {
+            None
+        };
+
+        Some(Ok(Conditional {
+            condition,
+            then_expr,
+            else_expr,
+        }))
+    }
+}
+
+#[derive(Debug)]
 pub enum Expression<'a> {
     Literal(Literal<'a>),
     Identifier(Identifer<'a>),
     BinaryOp(BinaryOp<'a>),
+    Conditional(Conditional<'a>),
 }
 
 #[derive(Debug)]
@@ -163,29 +224,23 @@ pub struct Ast<'a> {
     tree: Box<Expression<'a>>,
 }
 
-fn parse_factor<'a>(
-    tokens: &'a Tokens,
-    at: &mut usize,
-    depth: usize,
-) -> Result<Expression<'a>, Error> {
+fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>, Error> {
     if tokens.peek(*at).as_str(tokens.code()) == "(" {
-        parse_parenthesized(tokens, at, depth)
-    } else if let Ok(lit) = Literal::parse(tokens, at) {
-        Ok(Expression::Literal(lit))
-    } else if let Ok(id) = Identifer::parse(tokens, at) {
+        parse_parenthesized(tokens, at)
+    } else if let Some(res) = Literal::parse(tokens, at) {
+        Ok(Expression::Literal(res?))
+    } else if let Some(id) = Identifer::parse(tokens, at) {
         Ok(Expression::Identifier(id))
+    } else if let Some(res) = Conditional::parse(tokens, at) {
+        Ok(Expression::Conditional(res?))
     } else {
         Err(Error::ExpectedTerm(tokens.peek(*at).kind()))
     }
 }
 
-fn parse_parenthesized<'a>(
-    tokens: &'a Tokens,
-    at: &mut usize,
-    depth: usize,
-) -> Result<Expression<'a>, Error> {
+fn parse_parenthesized<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>, Error> {
     tokens.consume_one_of(at, &["("])?;
-    let expr = parse_expression(tokens, at, depth);
+    let expr = parse_expression(tokens, at);
     tokens.consume_one_of(at, &[")"])?;
     expr
 }
@@ -199,17 +254,16 @@ macro_rules! token_str {
 fn parse_expression_left<'a>(
     tokens: &'a Tokens<'_>,
     at: &mut usize,
-    depth: usize,
     ops: &[&str],
-    parse_term_fn: impl Fn(&'a Tokens, &mut usize, usize) -> Result<Expression<'a>, Error>,
+    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
 ) -> Result<Expression<'a>, Error> {
     let code = tokens.code();
 
-    start_trace!("Parser", depth);
+    start_trace!("Parser");
     trace!(token_str!(tokens, *at));
 
     // Accumulate tree into left
-    let mut left = parse_term_fn(tokens, at, depth + 1)?;
+    let mut left = parse_term_fn(tokens, at)?;
 
     let result = loop {
         if !ops.contains(&tokens.peek(*at).as_str(code)) {
@@ -225,7 +279,7 @@ fn parse_expression_left<'a>(
 
         trace!(token_str!(tokens, *at));
 
-        let right = match parse_term_fn(tokens, at, depth + 1) {
+        let right = match parse_term_fn(tokens, at) {
             Ok(expr) => expr,
             Err(e) => break Err(e),
         };
@@ -246,19 +300,10 @@ fn parse_expression_left<'a>(
     result
 }
 
-fn parse_expression<'a>(
-    tokens: &'a Tokens<'_>,
-    at: &mut usize,
-    depth: usize,
-) -> Result<Expression<'a>, Error> {
-    parse_expression_left(
-        tokens,
-        at,
-        depth,
-        &["+", "-"],
-        |tokens, at, depth| parse_expression_left(tokens, at, depth, &["*", "/"], parse_factor),
-        // TODO: why is depth wrong in trace?
-    )
+fn parse_expression<'a>(tokens: &'a Tokens<'_>, at: &mut usize) -> Result<Expression<'a>, Error> {
+    parse_expression_left(tokens, at, &["+", "-"], |tokens, at| {
+        parse_expression_left(tokens, at, &["*", "/"], parse_factor)
+    })
 }
 
 impl Tokens<'_> {
@@ -284,7 +329,7 @@ impl Tokens<'_> {
 
 pub fn parse<'a>(tokens: &'a Tokens) -> Result<Ast<'a>, Error> {
     let mut at = 0;
-    let root = parse_expression(tokens, &mut at, 0)?;
+    let root = parse_expression(tokens, &mut at)?;
 
     let kind = tokens.peek(at).kind();
     if kind != Kind::End {

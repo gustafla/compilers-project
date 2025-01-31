@@ -1,7 +1,7 @@
 macro_rules! start_trace {
-    ($label: literal, $depth: expr) => {
+    ($label: literal) => {
         if crate::config::verbose() {
-            eprint!("\n{}{}:", "  ".repeat($depth), $label);
+            eprint!("\n{}:", $label);
         }
     };
 }

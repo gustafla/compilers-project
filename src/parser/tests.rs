@@ -169,3 +169,63 @@ fn parse_expression_with_identifiers() {
         }
     );
 }
+
+#[test]
+fn parse_expression_with_conditional() {
+    let code = "if a then 1 + 1";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        Ast {
+            tree: Box::new(Expression::Conditional(Conditional {
+                condition: Ast {
+                    tree: Box::new(Expression::Identifier(Identifer { name: "a" }))
+                },
+                then_expr: Ast {
+                    tree: Box::new(Expression::BinaryOp(BinaryOp {
+                        left: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(1)))
+                        },
+                        op: Op::Add,
+                        right: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(1)))
+                        }
+                    }))
+                },
+                else_expr: None,
+            }))
+        }
+    );
+}
+
+#[test]
+fn parse_binary_op_with_conditional() {
+    let code = "1 + if true then 2 else 3";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        Ast {
+            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                left: Ast {
+                    tree: Box::new(Expression::Literal(Literal::Int(1)))
+                },
+                op: Op::Add,
+                right: Ast {
+                    tree: Box::new(Expression::Conditional(Conditional {
+                        condition: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Bool(true)))
+                        },
+                        then_expr: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(2)))
+                        },
+                        else_expr: Some(Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(3)))
+                        }),
+                    }))
+                }
+            }))
+        },
+    );
+}

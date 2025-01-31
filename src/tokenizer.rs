@@ -141,7 +141,7 @@ pub fn tokenize(code: &str) -> Result<Tokens<'_>, Error> {
     let mut tokens = Vec::new();
     let mut at: usize = 0;
 
-    start_trace!("Tokenizer", 0);
+    start_trace!("Tokenizer");
 
     let result = 'outer: loop {
         let rest = &code[at..];
