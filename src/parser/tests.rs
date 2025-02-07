@@ -330,3 +330,34 @@ fn parse_expression_with_fn_call() {
         }
     )
 }
+
+#[test]
+fn parse_expression_with_nested_fn_call() {
+    let code = r#"printf("Error at packet %d: %s (context: %s)\n", packet, SDL_GetError(), describe_context(context))"#;
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        Ast {
+            tree: Box::new(Expression::FnCall(FnCall {
+                function: Identifier { name: "printf" },
+                arguments: vec![
+                    Expression::Literal(Literal::Str(r#"Error at packet %d: %s (context: %s)\n"#)),
+                    Expression::Identifier(Identifier { name: "packet" }),
+                    Expression::FnCall(FnCall {
+                        function: Identifier {
+                            name: "SDL_GetError"
+                        },
+                        arguments: vec![]
+                    }),
+                    Expression::FnCall(FnCall {
+                        function: Identifier {
+                            name: "describe_context"
+                        },
+                        arguments: vec![Expression::Identifier(Identifier { name: "context" })],
+                    })
+                ],
+            }))
+        }
+    )
+}

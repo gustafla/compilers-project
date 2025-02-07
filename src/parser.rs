@@ -66,7 +66,7 @@ impl<'a> Literal<'a> {
                 }),
             },
             Kind::StrLiteral => {
-                let unquoted = &token.as_str(code)[1..token.len() - 2];
+                let unquoted = &token.as_str(code)[1..token.len() - 1];
                 // TODO: Process escape syntax like \"\" and \\
                 Ok(Literal::Str(unquoted))
             }
@@ -238,6 +238,10 @@ impl<'a> FnCall<'a> {
         // Parse arguments
         let mut arguments = Vec::new();
         loop {
+            if tokens.peek(*at).as_str(code) == ")" {
+                tokens.consume(at);
+                break;
+            }
             let arg = match parse_expression(tokens, at) {
                 Ok(expr) => expr,
                 Err(e) => return Some(Err(e)),
