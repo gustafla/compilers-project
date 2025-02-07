@@ -73,7 +73,7 @@ fn parse_expression_error() {
 }
 
 #[test]
-fn parse_expression_precedence() {
+fn parse_expression_precedence_basic() {
     let code = "1+2+3";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -360,4 +360,123 @@ fn parse_expression_with_nested_fn_call() {
             }))
         }
     )
+}
+
+#[test]
+fn parse_expression_assignment() {
+    let code = "a = b = c";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        Ast {
+            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                left: Ast {
+                    tree: Box::new(Expression::Identifier(Identifier { name: "a" }))
+                },
+                op: Op::Assign,
+                right: Ast {
+                    tree: Box::new(Expression::BinaryOp(BinaryOp {
+                        left: Ast {
+                            tree: Box::new(Expression::Identifier(Identifier { name: "b" }))
+                        },
+                        op: Op::Assign,
+                        right: Ast {
+                            tree: Box::new(Expression::Identifier(Identifier { name: "c" }))
+                        }
+                    }))
+                },
+            }))
+        }
+    );
+}
+
+#[test]
+fn parse_expression_complex() {
+    let code = "if true or false and foo then a = b = 1+2*sqrt(2)";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        Ast {
+            tree: Box::new(Expression::Conditional(Conditional {
+                condition: Ast {
+                    tree: Box::new(Expression::BinaryOp(BinaryOp {
+                        left: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Bool(true)))
+                        },
+                        op: Op::Or,
+                        right: Ast {
+                            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                                left: Ast {
+                                    tree: Box::new(Expression::Literal(Literal::Bool(false)))
+                                },
+                                op: Op::And,
+                                right: Ast {
+                                    tree: Box::new(Expression::Identifier(Identifier {
+                                        name: "foo"
+                                    }))
+                                }
+                            }))
+                        },
+                    }))
+                },
+                then_expr: Ast {
+                    tree: Box::new(Expression::BinaryOp(BinaryOp {
+                        left: Ast {
+                            tree: Box::new(Expression::Identifier(Identifier { name: "a" })),
+                        },
+                        op: Op::Assign,
+                        right: Ast {
+                            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                                left: Ast {
+                                    tree: Box::new(Expression::Identifier(Identifier {
+                                        name: "b"
+                                    })),
+                                },
+                                op: Op::Assign,
+                                right: Ast {
+                                    tree: Box::new(Expression::BinaryOp(BinaryOp {
+                                        left: Ast {
+                                            tree: Box::new(Expression::Literal(Literal::Int(1)))
+                                        },
+                                        op: Op::Add,
+                                        right: Ast {
+                                            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                                                left: Ast {
+                                                    tree: Box::new(Expression::Literal(
+                                                        Literal::Int(2)
+                                                    ))
+                                                },
+                                                op: Op::Mul,
+                                                right: Ast {
+                                                    tree: Box::new(Expression::FnCall(FnCall {
+                                                        function: Identifier { name: "sqrt" },
+                                                        arguments: vec![Expression::Literal(
+                                                            Literal::Int(2)
+                                                        )]
+                                                    }))
+                                                }
+                                            }))
+                                        }
+                                    }))
+                                },
+                            })),
+                        },
+                    })),
+                },
+                else_expr: None,
+            }))
+        }
+    );
+}
+
+#[test]
+fn parse_expression_unary() {
+    todo!()
+}
+
+#[test]
+fn parse_expression_precedence_complex() {
+    todo!()
 }

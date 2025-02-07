@@ -103,27 +103,65 @@ pub enum Op {
     Sub,
     Mul,
     Div,
+    Rem,
+    Eq,
+    Ne,
+    Leq,
+    Lt,
+    Geq,
+    Gt,
+    And,
+    Or,
+    Not,
+    Assign,
 }
 
 impl Op {
     pub fn parse(tokens: &Tokens, at: &mut usize) -> Result<Self, Error> {
         let code = tokens.code();
         let token = tokens.peek(*at);
-        if token.kind() != Kind::Operator {
-            return Err(Error::ExpectedOp(token.kind()));
-        }
+        let op = match token.as_str(code) {
+            "+" => Op::Add,
+            "-" => Op::Sub,
+            "*" => Op::Mul,
+            "/" => Op::Div,
+            "%" => Op::Rem,
+            "==" => Op::Eq,
+            "!=" => Op::Ne,
+            "<=" => Op::Leq,
+            "<" => Op::Lt,
+            ">=" => Op::Geq,
+            ">" => Op::Gt,
+            "and" => Op::And,
+            "or" => Op::Or,
+            "not" => Op::Not,
+            "=" => Op::Assign,
+            str => {
+                return Err(Error::ExpectedOneOf {
+                    of: vec![
+                        "+".into(),
+                        "-".into(),
+                        "*".into(),
+                        "/".into(),
+                        "%".into(),
+                        "==".into(),
+                        "!=".into(),
+                        "<=".into(),
+                        "<".into(),
+                        ">=".into(),
+                        ">".into(),
+                        "and".into(),
+                        "or".into(),
+                        "not".into(),
+                        "=".into(),
+                    ],
+                    token: str.into(),
+                })
+            }
+        };
 
-        let token = tokens.consume(at);
-        match token.as_str(code) {
-            "+" => Ok(Op::Add),
-            "-" => Ok(Op::Sub),
-            "*" => Ok(Op::Mul),
-            "/" => Ok(Op::Div),
-            str => Err(Error::ExpectedOneOf {
-                of: vec!["+".into(), "-".into(), "*".into(), "/".into()],
-                token: str.into(),
-            }),
-        }
+        tokens.consume(at);
+        Ok(op)
     }
 }
 
@@ -133,10 +171,21 @@ impl Display for Op {
             f,
             "{}",
             match self {
-                Op::Add => '+',
-                Op::Sub => '-',
-                Op::Mul => '*',
-                Op::Div => '/',
+                Op::Add => "+",
+                Op::Sub => "-",
+                Op::Mul => "*",
+                Op::Div => "/",
+                Op::Rem => "%",
+                Op::Eq => "==",
+                Op::Ne => "!=",
+                Op::Leq => "<=",
+                Op::Lt => "<",
+                Op::Geq => ">=",
+                Op::Gt => ">",
+                Op::And => "and",
+                Op::Or => "or",
+                Op::Not => "not",
+                Op::Assign => "=",
             }
         )
     }
@@ -145,6 +194,12 @@ impl Display for Op {
 #[derive(Debug)]
 pub struct BinaryOp<'a> {
     left: Ast<'a>,
+    op: Op,
+    right: Ast<'a>,
+}
+
+#[derive(Debug)]
+pub struct UnaryOp<'a> {
     op: Op,
     right: Ast<'a>,
 }
@@ -268,6 +323,7 @@ pub enum Expression<'a> {
     Literal(Literal<'a>),
     Identifier(Identifier<'a>),
     BinaryOp(BinaryOp<'a>),
+    UnaryOp(UnaryOp<'a>),
     Conditional(Conditional<'a>),
     FnCall(FnCall<'a>),
 }
@@ -311,7 +367,7 @@ macro_rules! token_str {
     };
 }
 
-fn parse_expression_left<'a>(
+fn parse_binary_expr_left<'a>(
     tokens: &'a Tokens<'_>,
     at: &mut usize,
     ops: &[&str],
@@ -360,9 +416,79 @@ fn parse_expression_left<'a>(
     result
 }
 
+fn parse_assignment_expr_right<'a>(
+    tokens: &'a Tokens<'_>,
+    at: &mut usize,
+    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
+) -> Result<Expression<'a>, Error> {
+    let code = tokens.code();
+
+    start_trace!("Parser right");
+    trace!(token_str!(tokens, *at));
+
+    let mut terms = Vec::new();
+    terms.push(parse_term_fn(tokens, at)?);
+
+    while tokens.peek(*at).as_str(code) == "=" {
+        tokens.consume(at);
+        terms.push(parse_term_fn(tokens, at)?);
+    }
+
+    let mut right = terms.pop().unwrap();
+
+    while let Some(expr) = terms.pop() {
+        right = Expression::BinaryOp(BinaryOp {
+            left: Ast {
+                tree: Box::new(expr),
+            },
+            op: Op::Assign,
+            right: Ast {
+                tree: Box::new(right),
+            },
+        });
+    }
+
+    Ok(right)
+}
+
+fn parse_unary_expr<'a>(
+    tokens: &'a Tokens<'_>,
+    at: &mut usize,
+    ops: &[&str],
+    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
+) -> Result<Expression<'a>, Error> {
+    let code = tokens.code();
+    if ops.contains(&tokens.peek(*at).as_str(code)) {
+        let op = Op::parse(tokens, at)?;
+        let expr = parse_term_fn(tokens, at)?;
+        Ok(Expression::UnaryOp(UnaryOp {
+            op,
+            right: Ast {
+                tree: Box::new(expr),
+            },
+        }))
+    } else {
+        parse_term_fn(tokens, at)
+    }
+}
+
 fn parse_expression<'a>(tokens: &'a Tokens<'_>, at: &mut usize) -> Result<Expression<'a>, Error> {
-    parse_expression_left(tokens, at, &["+", "-"], |tokens, at| {
-        parse_expression_left(tokens, at, &["*", "/"], parse_factor)
+    parse_assignment_expr_right(tokens, at, |tokens, at| {
+        parse_binary_expr_left(tokens, at, &["or"], |tokens, at| {
+            parse_binary_expr_left(tokens, at, &["and"], |tokens, at| {
+                parse_binary_expr_left(tokens, at, &["==", "!="], |tokens, at| {
+                    parse_binary_expr_left(tokens, at, &["<", "<=", ">", "<="], |tokens, at| {
+                        parse_binary_expr_left(tokens, at, &["+", "-"], |tokens, at| {
+                            parse_binary_expr_left(tokens, at, &["*", "/", "%"], |tokens, at| {
+                                parse_unary_expr(tokens, at, &["-", "not"], |tokens, at| {
+                                    parse_factor(tokens, at)
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+        })
     })
 }
 
