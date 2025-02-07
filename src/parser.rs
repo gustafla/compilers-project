@@ -225,14 +225,18 @@ pub struct Ast<'a> {
 }
 
 fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>, Error> {
+    eprintln!(
+        "parse_factor called, token: {}",
+        tokens.peek(*at).as_str(tokens.code())
+    );
     if tokens.peek(*at).as_str(tokens.code()) == "(" {
         parse_parenthesized(tokens, at)
     } else if let Some(res) = Literal::parse(tokens, at) {
         Ok(Expression::Literal(res?))
-    } else if let Some(id) = Identifer::parse(tokens, at) {
-        Ok(Expression::Identifier(id))
     } else if let Some(res) = Conditional::parse(tokens, at) {
         Ok(Expression::Conditional(res?))
+    } else if let Some(id) = Identifer::parse(tokens, at) {
+        Ok(Expression::Identifier(id))
     } else {
         Err(Error::ExpectedTerm(tokens.peek(*at).kind()))
     }

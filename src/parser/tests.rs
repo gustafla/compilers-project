@@ -17,6 +17,15 @@ impl PartialEq for Expression<'_> {
 
                 a.left.eq(&b.left) && a.right.eq(&b.right)
             }
+            (E::Conditional(a), E::Conditional(b)) => {
+                if a.condition != b.condition {
+                    return false;
+                }
+                if a.then_expr != b.then_expr {
+                    return false;
+                }
+                a.else_expr.eq(&b.else_expr)
+            }
             _ => false,
         }
     }
