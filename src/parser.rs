@@ -1,11 +1,10 @@
 #![cfg_attr(not(test), expect(dead_code, reason = "Work in progress"))]
 
+#[macro_use]
+mod macros;
 mod tests;
 
-use crate::{
-    tokenizer::{Kind, Token, Tokens},
-    trace::{end_trace, start_trace, trace},
-};
+use crate::tokenizer::{Kind, Token, Tokens};
 use std::{fmt::Display, num::ParseIntError, str::ParseBoolError};
 use thiserror::Error;
 
