@@ -21,6 +21,8 @@ pub enum Error {
     ExpectedTerm(Kind),
     #[error("Expected an operator, but encountered {0:?}")]
     ExpectedOp(Kind),
+    #[error("Expected an comma, but encountered {0:?}")]
+    ExpectedComma(Kind),
     #[error("Expected keyword `{0}`, but encountered {1:?}")]
     ExpectedKeyword(String, Kind),
     #[error("Unexpected {0:?} (expected EOF)")]
@@ -76,11 +78,11 @@ impl<'a> Literal<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Identifer<'a> {
+pub struct Identifier<'a> {
     name: &'a str,
 }
 
-impl<'a> Identifer<'a> {
+impl<'a> Identifier<'a> {
     pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Self> {
         let code = tokens.code();
         let token = tokens.peek(*at);
@@ -211,11 +213,59 @@ impl<'a> Conditional<'a> {
 }
 
 #[derive(Debug)]
+pub struct FnCall<'a> {
+    function: Identifier<'a>,
+    arguments: Vec<Expression<'a>>,
+}
+
+impl<'a> FnCall<'a> {
+    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+        let code = tokens.code();
+        // Check for identifier followed by an opening paren
+        let (Kind::Identifier, "(") = (tokens.peek(*at).kind(), tokens.peek(*at + 1).as_str(code))
+        else {
+            return None;
+        };
+
+        let token = tokens.consume(at);
+        let function = Identifier {
+            name: token.as_str(code),
+        };
+
+        // Consume opening paren
+        tokens.consume(at);
+
+        // Parse arguments
+        let mut arguments = Vec::new();
+        loop {
+            let arg = match parse_expression(tokens, at) {
+                Ok(expr) => expr,
+                Err(e) => return Some(Err(e)),
+            };
+            arguments.push(arg);
+            let token = tokens.consume(at);
+            if token.as_str(code) == ")" {
+                break;
+            }
+            if token.as_str(code) != "," {
+                return Some(Err(Error::ExpectedComma(token.kind())));
+            }
+        }
+
+        Some(Ok(Self {
+            function,
+            arguments,
+        }))
+    }
+}
+
+#[derive(Debug)]
 pub enum Expression<'a> {
     Literal(Literal<'a>),
-    Identifier(Identifer<'a>),
+    Identifier(Identifier<'a>),
     BinaryOp(BinaryOp<'a>),
     Conditional(Conditional<'a>),
+    FnCall(FnCall<'a>),
 }
 
 #[derive(Debug)]
@@ -233,9 +283,11 @@ fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>
         parse_parenthesized(tokens, at)
     } else if let Some(res) = Literal::parse(tokens, at) {
         Ok(Expression::Literal(res?))
+    } else if let Some(res) = FnCall::parse(tokens, at) {
+        Ok(Expression::FnCall(res?))
     } else if let Some(res) = Conditional::parse(tokens, at) {
         Ok(Expression::Conditional(res?))
-    } else if let Some(id) = Identifer::parse(tokens, at) {
+    } else if let Some(id) = Identifier::parse(tokens, at) {
         Ok(Expression::Identifier(id))
     } else {
         Err(Error::ExpectedTerm(tokens.peek(*at).kind()))

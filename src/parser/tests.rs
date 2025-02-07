@@ -26,6 +26,12 @@ impl PartialEq for Expression<'_> {
                 }
                 a.else_expr.eq(&b.else_expr)
             }
+            (E::FnCall(a), E::FnCall(b)) => {
+                if a.function != b.function {
+                    return false;
+                }
+                a.arguments.eq(&b.arguments)
+            }
             _ => false,
         }
     }
@@ -160,17 +166,17 @@ fn parse_expression_with_identifiers() {
         Ast {
             tree: Box::new(Expression::BinaryOp(BinaryOp {
                 left: Ast {
-                    tree: Box::new(Expression::Identifier(Identifer { name: "a" }))
+                    tree: Box::new(Expression::Identifier(Identifier { name: "a" }))
                 },
                 op: Op::Add,
                 right: Ast {
                     tree: Box::new(Expression::BinaryOp(BinaryOp {
                         left: Ast {
-                            tree: Box::new(Expression::Identifier(Identifer { name: "b" }))
+                            tree: Box::new(Expression::Identifier(Identifier { name: "b" }))
                         },
                         op: Op::Mul,
                         right: Ast {
-                            tree: Box::new(Expression::Identifier(Identifer { name: "c" }))
+                            tree: Box::new(Expression::Identifier(Identifier { name: "c" }))
                         },
                     }))
                 },
@@ -189,7 +195,7 @@ fn parse_expression_with_conditional() {
         Ast {
             tree: Box::new(Expression::Conditional(Conditional {
                 condition: Ast {
-                    tree: Box::new(Expression::Identifier(Identifer { name: "a" }))
+                    tree: Box::new(Expression::Identifier(Identifier { name: "a" }))
                 },
                 then_expr: Ast {
                     tree: Box::new(Expression::BinaryOp(BinaryOp {
@@ -251,13 +257,15 @@ fn parse_expression_with_nested_conditional() {
                 condition: Ast {
                     tree: Box::new(Expression::Conditional(Conditional {
                         condition: Ast {
-                            tree: Box::new(Expression::Identifier(Identifer { name: "condition" })),
+                            tree: Box::new(Expression::Identifier(Identifier {
+                                name: "condition"
+                            })),
                         },
                         then_expr: Ast {
-                            tree: Box::new(Expression::Identifier(Identifer { name: "a" })),
+                            tree: Box::new(Expression::Identifier(Identifier { name: "a" })),
                         },
                         else_expr: Some(Ast {
-                            tree: Box::new(Expression::Identifier(Identifer { name: "b" })),
+                            tree: Box::new(Expression::Identifier(Identifier { name: "b" })),
                         })
                     }))
                 },
@@ -266,13 +274,19 @@ fn parse_expression_with_nested_conditional() {
                         condition: Ast {
                             tree: Box::new(Expression::Conditional(Conditional {
                                 condition: Ast {
-                                    tree: Box::new(Expression::Identifier(Identifer { name: "a" }))
+                                    tree: Box::new(Expression::Identifier(Identifier {
+                                        name: "a"
+                                    }))
                                 },
                                 then_expr: Ast {
-                                    tree: Box::new(Expression::Identifier(Identifer { name: "a" }))
+                                    tree: Box::new(Expression::Identifier(Identifier {
+                                        name: "a"
+                                    }))
                                 },
                                 else_expr: Some(Ast {
-                                    tree: Box::new(Expression::Identifier(Identifer { name: "b" }))
+                                    tree: Box::new(Expression::Identifier(Identifier {
+                                        name: "b"
+                                    }))
                                 })
                             }))
                         },
@@ -288,4 +302,31 @@ fn parse_expression_with_nested_conditional() {
             }))
         }
     );
+}
+
+#[test]
+fn parse_expression_with_fn_call() {
+    let code = "5 - add(1, 1)";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        Ast {
+            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                left: Ast {
+                    tree: Box::new(Expression::Literal(Literal::Int(5)))
+                },
+                op: Op::Sub,
+                right: Ast {
+                    tree: Box::new(Expression::FnCall(FnCall {
+                        function: Identifier { name: "add" },
+                        arguments: vec![
+                            Expression::Literal(Literal::Int(1)),
+                            Expression::Literal(Literal::Int(1)),
+                        ],
+                    }))
+                }
+            }))
+        }
+    )
 }
