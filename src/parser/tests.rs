@@ -9,19 +9,23 @@ impl PartialEq for Expression<'_> {
 
         match (self, other) {
             (E::Literal(a), E::Literal(b)) => a == b,
+            (E::Literal(..), _) => false,
             (E::Identifier(a), E::Identifier(b)) => a == b,
+            (E::Identifier(..), _) => false,
             (E::BinaryOp(a), E::BinaryOp(b)) => {
                 if a.op != b.op {
                     return false;
                 }
                 a.left.eq(&b.left) && a.right.eq(&b.right)
             }
+            (E::BinaryOp(..), _) => false,
             (E::UnaryOp(a), E::UnaryOp(b)) => {
                 if a.op != b.op {
                     return false;
                 }
                 a.right.eq(&b.right)
             }
+            (E::UnaryOp(..), _) => false,
             (E::Conditional(a), E::Conditional(b)) => {
                 if a.condition != b.condition {
                     return false;
@@ -31,13 +35,14 @@ impl PartialEq for Expression<'_> {
                 }
                 a.else_expr.eq(&b.else_expr)
             }
+            (E::Conditional(..), _) => false,
             (E::FnCall(a), E::FnCall(b)) => {
                 if a.function != b.function {
                     return false;
                 }
                 a.arguments.eq(&b.arguments)
             }
-            _ => false,
+            (E::FnCall(..), _) => false,
         }
     }
 }
