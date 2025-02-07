@@ -238,3 +238,54 @@ fn parse_binary_op_with_conditional() {
         },
     );
 }
+
+#[test]
+fn parse_expression_with_nested_conditional() {
+    let code = "if if condition then a else b then if if a then a else b then 32 else 42";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        Ast {
+            tree: Box::new(Expression::Conditional(Conditional {
+                condition: Ast {
+                    tree: Box::new(Expression::Conditional(Conditional {
+                        condition: Ast {
+                            tree: Box::new(Expression::Identifier(Identifer { name: "condition" })),
+                        },
+                        then_expr: Ast {
+                            tree: Box::new(Expression::Identifier(Identifer { name: "a" })),
+                        },
+                        else_expr: Some(Ast {
+                            tree: Box::new(Expression::Identifier(Identifer { name: "b" })),
+                        })
+                    }))
+                },
+                then_expr: Ast {
+                    tree: Box::new(Expression::Conditional(Conditional {
+                        condition: Ast {
+                            tree: Box::new(Expression::Conditional(Conditional {
+                                condition: Ast {
+                                    tree: Box::new(Expression::Identifier(Identifer { name: "a" }))
+                                },
+                                then_expr: Ast {
+                                    tree: Box::new(Expression::Identifier(Identifer { name: "a" }))
+                                },
+                                else_expr: Some(Ast {
+                                    tree: Box::new(Expression::Identifier(Identifer { name: "b" }))
+                                })
+                            }))
+                        },
+                        then_expr: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(32)))
+                        },
+                        else_expr: Some(Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(42)))
+                        }),
+                    }))
+                },
+                else_expr: None,
+            }))
+        }
+    );
+}
