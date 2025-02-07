@@ -14,8 +14,13 @@ impl PartialEq for Expression<'_> {
                 if a.op != b.op {
                     return false;
                 }
-
                 a.left.eq(&b.left) && a.right.eq(&b.right)
+            }
+            (E::UnaryOp(a), E::UnaryOp(b)) => {
+                if a.op != b.op {
+                    return false;
+                }
+                a.right.eq(&b.right)
             }
             (E::Conditional(a), E::Conditional(b)) => {
                 if a.condition != b.condition {
@@ -473,7 +478,122 @@ fn parse_expression_complex() {
 
 #[test]
 fn parse_expression_unary() {
-    todo!()
+    let code = "if not foo then -1 else -2";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        Ast {
+            tree: Box::new(Expression::Conditional(Conditional {
+                condition: Ast {
+                    tree: Box::new(Expression::UnaryOp(UnaryOp {
+                        op: Op::Not,
+                        right: Ast {
+                            tree: Box::new(Expression::Identifier(Identifier { name: "foo" }))
+                        }
+                    }))
+                },
+                then_expr: Ast {
+                    tree: Box::new(Expression::UnaryOp(UnaryOp {
+                        op: Op::Sub,
+                        right: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(1)))
+                        }
+                    }))
+                },
+                else_expr: Some(Ast {
+                    tree: Box::new(Expression::UnaryOp(UnaryOp {
+                        op: Op::Sub,
+                        right: Ast {
+                            tree: Box::new(Expression::Literal(Literal::Int(2)))
+                        }
+                    }))
+                }),
+            }))
+        }
+    )
+}
+
+#[test]
+fn parse_expression_nested_unary() {
+    let code = "if not not not not foo then --1 else -----2";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        Ast {
+            tree: Box::new(Expression::Conditional(Conditional {
+                condition: Ast {
+                    tree: Box::new(Expression::UnaryOp(UnaryOp {
+                        op: Op::Not,
+                        right: Ast {
+                            tree: Box::new(Expression::UnaryOp(UnaryOp {
+                                op: Op::Not,
+                                right: Ast {
+                                    tree: Box::new(Expression::UnaryOp(UnaryOp {
+                                        op: Op::Not,
+                                        right: Ast {
+                                            tree: Box::new(Expression::UnaryOp(UnaryOp {
+                                                op: Op::Not,
+                                                right: Ast {
+                                                    tree: Box::new(Expression::Identifier(
+                                                        Identifier { name: "foo" }
+                                                    ))
+                                                }
+                                            }))
+                                        }
+                                    }))
+                                }
+                            }))
+                        }
+                    }))
+                },
+                then_expr: Ast {
+                    tree: Box::new(Expression::UnaryOp(UnaryOp {
+                        op: Op::Sub,
+                        right: Ast {
+                            tree: Box::new(Expression::UnaryOp(UnaryOp {
+                                op: Op::Sub,
+                                right: Ast {
+                                    tree: Box::new(Expression::Literal(Literal::Int(1)))
+                                }
+                            }))
+                        }
+                    }))
+                },
+                else_expr: Some(Ast {
+                    tree: Box::new(Expression::UnaryOp(UnaryOp {
+                        op: Op::Sub,
+                        right: Ast {
+                            tree: Box::new(Expression::UnaryOp(UnaryOp {
+                                op: Op::Sub,
+                                right: Ast {
+                                    tree: Box::new(Expression::UnaryOp(UnaryOp {
+                                        op: Op::Sub,
+                                        right: Ast {
+                                            tree: Box::new(Expression::UnaryOp(UnaryOp {
+                                                op: Op::Sub,
+                                                right: Ast {
+                                                    tree: Box::new(Expression::UnaryOp(UnaryOp {
+                                                        op: Op::Sub,
+                                                        right: Ast {
+                                                            tree: Box::new(Expression::Literal(
+                                                                Literal::Int(2)
+                                                            ))
+                                                        }
+                                                    }))
+                                                }
+                                            }))
+                                        }
+                                    }))
+                                }
+                            }))
+                        }
+                    }))
+                }),
+            }))
+        }
+    )
 }
 
 #[test]

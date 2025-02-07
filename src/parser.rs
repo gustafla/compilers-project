@@ -361,12 +361,6 @@ fn parse_parenthesized<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Express
     expr
 }
 
-macro_rules! token_str {
-    ($tokens: expr, $at: expr) => {
-        $tokens.peek($at).as_str($tokens.code())
-    };
-}
-
 fn parse_binary_expr_left<'a>(
     tokens: &'a Tokens<'_>,
     at: &mut usize,
@@ -374,9 +368,6 @@ fn parse_binary_expr_left<'a>(
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
 ) -> Result<Expression<'a>, Error> {
     let code = tokens.code();
-
-    start_trace!("Parser");
-    trace!(token_str!(tokens, *at));
 
     // Accumulate tree into left
     let mut left = parse_term_fn(tokens, at)?;
@@ -386,14 +377,10 @@ fn parse_binary_expr_left<'a>(
             break Ok(left);
         }
 
-        trace!(token_str!(tokens, *at));
-
         let op = match Op::parse(tokens, at) {
             Ok(op) => op,
             Err(e) => break Err(e),
         };
-
-        trace!(token_str!(tokens, *at));
 
         let right = match parse_term_fn(tokens, at) {
             Ok(expr) => expr,
@@ -411,8 +398,6 @@ fn parse_binary_expr_left<'a>(
         });
     };
 
-    end_trace!();
-
     result
 }
 
@@ -422,9 +407,6 @@ fn parse_assignment_expr_right<'a>(
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
 ) -> Result<Expression<'a>, Error> {
     let code = tokens.code();
-
-    start_trace!("Parser right");
-    trace!(token_str!(tokens, *at));
 
     let mut terms = Vec::new();
     terms.push(parse_term_fn(tokens, at)?);
@@ -458,18 +440,23 @@ fn parse_unary_expr<'a>(
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
 ) -> Result<Expression<'a>, Error> {
     let code = tokens.code();
-    if ops.contains(&tokens.peek(*at).as_str(code)) {
-        let op = Op::parse(tokens, at)?;
-        let expr = parse_term_fn(tokens, at)?;
-        Ok(Expression::UnaryOp(UnaryOp {
+    let mut op = Vec::new();
+    while ops.contains(&tokens.peek(*at).as_str(code)) {
+        op.push(Op::parse(tokens, at)?);
+    }
+
+    let mut expr = parse_term_fn(tokens, at)?;
+
+    while let Some(op) = op.pop() {
+        expr = Expression::UnaryOp(UnaryOp {
             op,
             right: Ast {
                 tree: Box::new(expr),
             },
-        }))
-    } else {
-        parse_term_fn(tokens, at)
+        });
     }
+
+    Ok(expr)
 }
 
 fn parse_expression<'a>(tokens: &'a Tokens<'_>, at: &mut usize) -> Result<Expression<'a>, Error> {
