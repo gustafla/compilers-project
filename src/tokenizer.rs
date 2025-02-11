@@ -124,7 +124,10 @@ static REGULAR_EXPRESSIONS: LazyLock<[(Regex, Option<Kind>); 8]> = LazyLock::new
         // Integer
         (r#"^[[:digit:]]+"#, Some(Kind::Integer)),
         // Operator
-        (r#"^(?:==|!=|<=|>=|\+|-|\*|/|=|<|>)"#, Some(Kind::Operator)),
+        (
+            r#"^(?:==|!=|<=|>=|\+|-|\*|/|%|=|<|>)"#,
+            Some(Kind::Operator)
+        ),
         // Punctuation
         (r#"^[(){},;]"#, Some(Kind::Punctuation)),
         // Identifier
