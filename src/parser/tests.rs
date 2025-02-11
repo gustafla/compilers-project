@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+use serde::de::Expected;
+
 use super::*;
 use crate::tokenizer;
 
@@ -62,7 +64,7 @@ fn parse_expression_basic() {
 }
 
 #[test]
-fn parse_expression_error() {
+fn parse_expression_error0() {
     let code = "a + b c";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens);
@@ -431,4 +433,36 @@ fn parse_expression_precedence_complex() {
             }
         }
     );
+}
+
+#[test]
+fn parse_expression_error1() {
+    let code = "- if true then a = y = x not else xd";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens);
+    assert!(expression.is_err());
+}
+
+#[test]
+fn parse_expression_error2() {
+    let code = "+ if true then a = y = x else xd";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens);
+    assert!(expression.is_err());
+}
+
+#[test]
+fn parse_expression_error3() {
+    let code = "if true then a = y = x else xd -"; // TODO: fix this bug
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens);
+    assert!(expression.is_err());
+}
+
+#[test]
+fn parse_expression_error4() {
+    let code = "if true then a++ else xd";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens);
+    assert!(expression.is_err());
 }
