@@ -367,6 +367,10 @@ fn parse_binary_expr_left<'a>(
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
 ) -> Result<Expression<'a>, Error> {
     let code = tokens.code();
+    eprintln!(
+        "parse_binary_expr_left for {ops:?}, token: {:?} at {at}",
+        tokens.peek(*at).as_str(tokens.code())
+    );
 
     // Accumulate tree into left
     let mut left = parse_term_fn(tokens, at)?;
@@ -406,6 +410,10 @@ fn parse_assignment_expr_right<'a>(
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
 ) -> Result<Expression<'a>, Error> {
     let code = tokens.code();
+    eprintln!(
+        "parse_assignment_expr_right (=), token: {:?} at {at}",
+        tokens.peek(*at).as_str(tokens.code())
+    );
 
     let mut terms = Vec::new();
     terms.push(parse_term_fn(tokens, at)?);
@@ -439,6 +447,11 @@ fn parse_unary_expr<'a>(
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
 ) -> Result<Expression<'a>, Error> {
     let code = tokens.code();
+    eprintln!(
+        "parse_unary_expr for {ops:?}, token: {:?} at {at}",
+        tokens.peek(*at).as_str(tokens.code())
+    );
+
     let mut op = Vec::new();
     while ops.contains(&tokens.peek(*at).as_str(code)) {
         op.push(Op::parse(tokens, at)?);
@@ -463,7 +476,7 @@ fn parse_expression<'a>(tokens: &'a Tokens<'_>, at: &mut usize) -> Result<Expres
         parse_binary_expr_left(tokens, at, &["or"], |tokens, at| {
             parse_binary_expr_left(tokens, at, &["and"], |tokens, at| {
                 parse_binary_expr_left(tokens, at, &["==", "!="], |tokens, at| {
-                    parse_binary_expr_left(tokens, at, &["<", "<=", ">", "<="], |tokens, at| {
+                    parse_binary_expr_left(tokens, at, &["<", "<=", ">", ">="], |tokens, at| {
                         parse_binary_expr_left(tokens, at, &["+", "-"], |tokens, at| {
                             parse_binary_expr_left(tokens, at, &["*", "/", "%"], |tokens, at| {
                                 parse_unary_expr(tokens, at, &["-", "not"], |tokens, at| {

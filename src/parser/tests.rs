@@ -352,5 +352,83 @@ fn parse_expression_nested_unary() {
 
 #[test]
 fn parse_expression_precedence_complex() {
-    todo!()
+    let code =
+        "- if true then a = 1 or 1 and 1 == 1 != 1 < 1 <= 1 > 1 >= 1 + 1 - 1 * 1 / 1 % -1 = x else xd";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! {
+            op!{Op::Sub,
+                con! {
+                    tru!{},
+                    op! {
+                        id!("a"),
+                        Op::Assign,
+                        op! {
+                            op! {
+                                int!(1),
+                                Op::Or,
+                                op! {
+                                    int!(1),
+                                    Op::And,
+                                    op! {
+                                        op! {
+                                            int!(1),
+                                            Op::Eq,
+                                            int!(1),
+                                        },
+                                        Op::Ne,
+                                        op ! {
+                                            op! {
+                                                op! {
+                                                    op! {
+                                                        int!(1),
+                                                        Op::Lt,
+                                                        int!(1),
+                                                    },
+                                                    Op::Leq,
+                                                    int!(1),
+                                                },
+                                                Op::Gt,
+                                                int!(1),
+                                            },
+                                            Op::Geq,
+                                            op! {
+                                                op! {
+                                                    int!(1),
+                                                    Op::Add,
+                                                    int!(1),
+                                                },
+                                                Op::Sub,
+                                                op! {
+                                                    op! {
+                                                        op! {
+                                                            int!(1),
+                                                            Op::Mul,
+                                                            int!(1),
+                                                        },
+                                                        Op::Div,
+                                                        int!(1),
+                                                    },
+                                                    Op::Rem,
+                                                    op! {
+                                                        Op::Sub,
+                                                        int!(1),
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                            },
+                            Op::Assign,
+                            id!("x")
+                        }
+                    },
+                    id!("xd")
+                },
+            }
+        }
+    );
 }
