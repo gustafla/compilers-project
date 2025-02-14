@@ -1,7 +1,5 @@
 #![cfg(test)]
 
-use serde::de::Expected;
-
 use super::*;
 use crate::tokenizer;
 
@@ -18,14 +16,14 @@ impl PartialEq for Expression<'_> {
                 if a.op != b.op {
                     return false;
                 }
-                a.left.eq(&b.left) && a.right.eq(&b.right)
+                a.left == b.left && a.right == b.right
             }
             (E::BinaryOp(..), _) => false,
             (E::UnaryOp(a), E::UnaryOp(b)) => {
                 if a.op != b.op {
                     return false;
                 }
-                a.right.eq(&b.right)
+                a.right == b.right
             }
             (E::UnaryOp(..), _) => false,
             (E::Conditional(a), E::Conditional(b)) => {
@@ -35,23 +33,30 @@ impl PartialEq for Expression<'_> {
                 if a.then_expr != b.then_expr {
                     return false;
                 }
-                a.else_expr.eq(&b.else_expr)
+                a.else_expr == b.else_expr
             }
             (E::Conditional(..), _) => false,
             (E::FnCall(a), E::FnCall(b)) => {
                 if a.function != b.function {
                     return false;
                 }
-                a.arguments.eq(&b.arguments)
+                a.arguments == b.arguments
             }
             (E::FnCall(..), _) => false,
+            (E::Block(a), E::Block(b)) => {
+                if a.expressions != b.expressions {
+                    return false;
+                }
+                a.result == b.result
+            }
+            (E::Block(..), _) => false,
         }
     }
 }
 
 impl PartialEq for Ast<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.tree.eq(&other.tree)
+        self.tree == other.tree
     }
 }
 
@@ -465,4 +470,27 @@ fn parse_expression_error4() {
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens);
     assert!(expression.is_err());
+}
+
+#[test]
+fn parse_expression_with_block() {
+    let code = "if ok then {fn1(); fn2(); exit(0);} else {exit(1)}";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! {
+            con! {
+                id!("ok"),
+                blk! {
+                    fun!("fn1");
+                    fun!("fn2");
+                    fun!("exit", int!(0));
+                },
+                blk! {
+                    , fun!("exit", int!(1))
+                }
+            }
+        }
+    )
 }

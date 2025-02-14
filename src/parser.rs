@@ -328,6 +328,50 @@ impl<'a> FnCall<'a> {
 }
 
 #[derive(Debug)]
+pub struct Block<'a> {
+    expressions: Vec<Ast<'a>>,
+    result: Option<Ast<'a>>,
+}
+
+impl<'a> Block<'a> {
+    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+        traceln!("Block::parse");
+
+        if tokens.consume_one_of(at, &["{"]).is_err() {
+            return None;
+        };
+
+        let mut expressions = Vec::new();
+        let mut result = None;
+
+        while tokens.consume_one_of(at, &["}"]).is_err() {
+            let expr = match parse_expression(tokens, at) {
+                Ok(expr) => Ast {
+                    tree: Box::new(expr),
+                },
+                Err(e) => return Some(Err(e)),
+            };
+
+            if let Err(e) = tokens.consume_one_of(at, &[";"]) {
+                if tokens.consume_one_of(at, &["}"]).is_ok() {
+                    result = Some(expr);
+                    break;
+                }
+
+                return Some(Err(e));
+            };
+
+            expressions.push(expr);
+        }
+
+        Some(Ok(Self {
+            expressions,
+            result,
+        }))
+    }
+}
+
+#[derive(Debug)]
 pub enum Expression<'a> {
     Literal(Literal<'a>),
     Identifier(Identifier<'a>),
@@ -335,6 +379,7 @@ pub enum Expression<'a> {
     UnaryOp(UnaryOp<'a>),
     Conditional(Conditional<'a>),
     FnCall(FnCall<'a>),
+    Block(Block<'a>),
 }
 
 #[derive(Debug)]
@@ -350,6 +395,8 @@ fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>
     );
     if tokens.peek(*at).as_str(tokens.code()) == "(" {
         parse_parenthesized(tokens, at)
+    } else if let Some(res) = Block::parse(tokens, at) {
+        Ok(Expression::Block(res?))
     } else if let Some(res) = Literal::parse(tokens, at) {
         Ok(Expression::Literal(res?))
     } else if let Some(res) = FnCall::parse(tokens, at) {

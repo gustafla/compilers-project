@@ -94,3 +94,22 @@ macro_rules! fun {
         })
     };
 }
+
+macro_rules! blk {
+    {$($exprs: expr);*;} => {
+        Expression::Block(Block {
+            expressions: vec![$($exprs),*].into_iter().map(|expr| Ast{
+                tree: Box::new(expr)
+            }).collect(),
+            result: None,
+        })
+    };
+    {$($exprs: expr);*, $res: expr} => {
+        Expression::Block(Block {
+            expressions: vec![$($exprs),*].into_iter().map(|expr| Ast{
+                tree: Box::new(expr)
+            }).collect(),
+            result: Some(Ast{tree: Box::new($res)}),
+        })
+    };
+}
