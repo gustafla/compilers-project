@@ -345,12 +345,19 @@ impl<'a> Block<'a> {
         let mut result = None;
 
         while tokens.consume_one_of(at, &["}"]).is_err() {
-            let expr = match parse_expression(tokens, at) {
-                Ok(expr) => Ast {
-                    tree: Box::new(expr),
+            // Only blocks can contain variable declarations, try them first
+            let expr = match Var::parse(tokens, at) {
+                Some(Ok(var)) => Expression::Var(var),
+                Some(Err(e)) => return Some(Err(e)),
+                None => match parse_expression(tokens, at) {
+                    Ok(expr) => expr,
+                    Err(e) => return Some(Err(e)),
                 },
-                Err(e) => return Some(Err(e)),
             };
+            let expr = Ast {
+                tree: Box::new(expr),
+            };
+            // TODO: What if variable declaration is result expr?
 
             if let Err(e) = tokens.consume_one_of(at, &[";"]) {
                 if tokens.consume_one_of(at, &["}"]).is_ok() {
@@ -372,6 +379,57 @@ impl<'a> Block<'a> {
 }
 
 #[derive(Debug)]
+pub struct Var<'a> {
+    id: Identifier<'a>,
+    init: Ast<'a>,
+}
+
+impl<'a> Var<'a> {
+    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+        traceln!("Var::parse");
+        let code = tokens.code();
+
+        // var
+        let token = tokens.peek(*at);
+        if token.kind() != Kind::Identifier || token.as_str(code) != "var" {
+            return None;
+        }
+        tokens.consume(at);
+
+        // _MAYBE_ parse_assignment_expr_right could be used here,
+        // but I'd have to specify its parse_term_fn and that's not trivial.
+        // Also, I'd have to verify that it has at least one =
+
+        // <id>
+        let Some(id) = Identifier::parse(tokens, at) else {
+            return Some(Err(Error::ExpectedIdentifier(tokens.peek(*at).kind())));
+        };
+
+        // Op::Assign
+        match Op::parse(tokens, at) {
+            Ok(Op::Assign) => {}
+            Ok(op) => {
+                return Some(Err(Error::ExpectedOneOf {
+                    of: vec!["=".to_owned()],
+                    token: op.to_string(),
+                }))
+            }
+            Err(e) => return Some(Err(e)),
+        };
+
+        // <init>
+        let init = match parse_expression(tokens, at) {
+            Ok(expr) => Ast {
+                tree: Box::new(expr),
+            },
+            Err(e) => return Some(Err(e)),
+        };
+
+        Some(Ok(Self { id, init }))
+    }
+}
+
+#[derive(Debug)]
 pub enum Expression<'a> {
     Literal(Literal<'a>),
     Identifier(Identifier<'a>),
@@ -380,6 +438,7 @@ pub enum Expression<'a> {
     Conditional(Conditional<'a>),
     FnCall(FnCall<'a>),
     Block(Block<'a>),
+    Var(Var<'a>),
 }
 
 #[derive(Debug)]

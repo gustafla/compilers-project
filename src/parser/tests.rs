@@ -50,6 +50,13 @@ impl PartialEq for Expression<'_> {
                 a.result == b.result
             }
             (E::Block(..), _) => false,
+            (E::Var(a), E::Var(b)) => {
+                if a.id != b.id {
+                    return false;
+                }
+                a.init == b.init
+            }
+            (E::Var(..), _) => false,
         }
     }
 }
@@ -489,6 +496,30 @@ fn parse_expression_with_block() {
                 },
                 blk! {
                     , fun!("exit", int!(1))
+                }
+            }
+        }
+    )
+}
+
+#[test]
+fn parse_expression_with_var() {
+    let code = "if ok then {fn1(); fn2(); exit(0);} else {var retval = errno + 1; exit(retval)}";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! {
+            con! {
+                id!("ok"),
+                blk! {
+                    fun!("fn1");
+                    fun!("fn2");
+                    fun!("exit", int!(0));
+                },
+                blk! {
+                    var!("retval" = op!(id!("errno"), Op::Add, int!(1)))
+                    , fun!("exit", id!("retval"))
                 }
             }
         }

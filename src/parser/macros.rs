@@ -8,20 +8,14 @@ macro_rules! op {
     {$op: expr, $r: expr $(,)?} => {
         Expression::UnaryOp(UnaryOp{
             op: $op,
-            right: Ast {
-                tree: Box::new($r)
-            }
+            right: ast!($r),
         })
     };
     {$l: expr, $op: expr, $r: expr $(,)?} => {
         Expression::BinaryOp(BinaryOp {
-            left: Ast {
-                tree: Box::new($l)
-            },
+            left: ast!($l),
             op: $op,
-            right: Ast {
-                tree: Box::new($r)
-            }
+            right: ast!($r),
         })
     };
 }
@@ -47,26 +41,16 @@ macro_rules! id {
 macro_rules! con {
     {$ie: expr, $te: expr $(,)?} => {
         Expression::Conditional(Conditional {
-            condition: Ast {
-                tree: Box::new($ie),
-            },
-            then_expr: Ast {
-                tree: Box::new($te),
-            },
+            condition: ast!($ie),
+            then_expr: ast!($te),
             else_expr: None,
         })
     };
     {$ie: expr, $te: expr, $ee: expr $(,)?} => {
         Expression::Conditional(Conditional {
-            condition: Ast {
-                tree: Box::new($ie),
-            },
-            then_expr: Ast {
-                tree: Box::new($te),
-            },
-            else_expr: Some(Ast {
-                tree: Box::new($ee),
-            }),
+            condition: ast!($ie),
+            then_expr: ast!($te),
+            else_expr: Some(ast!($ee)),
         })
     };
 }
@@ -98,18 +82,23 @@ macro_rules! fun {
 macro_rules! blk {
     {$($exprs: expr);*;} => {
         Expression::Block(Block {
-            expressions: vec![$($exprs),*].into_iter().map(|expr| Ast{
-                tree: Box::new(expr)
-            }).collect(),
+            expressions: vec![$($exprs),*].into_iter().map(|expr| ast!(expr)).collect(),
             result: None,
         })
     };
     {$($exprs: expr);*, $res: expr} => {
         Expression::Block(Block {
-            expressions: vec![$($exprs),*].into_iter().map(|expr| Ast{
-                tree: Box::new(expr)
-            }).collect(),
-            result: Some(Ast{tree: Box::new($res)}),
+            expressions: vec![$($exprs),*].into_iter().map(|expr| ast!(expr)).collect(),
+            result: Some(ast!($res)),
+        })
+    };
+}
+
+macro_rules! var {
+    ($id: literal = $init: expr) => {
+        Expression::Var(Var {
+            id: Identifier { name: $id },
+            init: ast!($init),
         })
     };
 }
