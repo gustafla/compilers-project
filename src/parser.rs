@@ -4,7 +4,11 @@
 mod macros;
 mod tests;
 
-use crate::tokenizer::{Kind, Token, Tokens};
+use crate::{
+    config,
+    tokenizer::{Kind, Token, Tokens},
+    trace::{end_trace, start_trace, traceln},
+};
 use std::{fmt::Display, num::ParseIntError, str::ParseBoolError};
 use thiserror::Error;
 
@@ -49,6 +53,7 @@ pub enum Literal<'a> {
 
 impl<'a> Literal<'a> {
     pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+        traceln!("Literal::parse");
         let code = tokens.code();
         let token = tokens.peek(*at);
 
@@ -83,6 +88,7 @@ pub struct Identifier<'a> {
 
 impl<'a> Identifier<'a> {
     pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Self> {
+        traceln!("Identifier::parse");
         let code = tokens.code();
         let token = tokens.peek(*at);
         if token.kind() != Kind::Identifier {
@@ -119,6 +125,7 @@ impl Op {
     pub fn parse(tokens: &Tokens, at: &mut usize) -> Result<Self, Error> {
         let code = tokens.code();
         let token = tokens.peek(*at);
+        traceln!("Op::parse, token = {token:?}");
         let op = match token.as_str(code) {
             "+" => Op::Add,
             "-" => Op::Sub,
@@ -158,6 +165,7 @@ impl Op {
                 })
             }
         };
+        traceln!("consuming...");
 
         tokens.consume(at);
         Ok(op)
@@ -212,6 +220,7 @@ pub struct Conditional<'a> {
 
 impl<'a> Conditional<'a> {
     fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+        traceln!("Conditional::parse");
         let code = tokens.code();
 
         // If
@@ -274,6 +283,7 @@ pub struct FnCall<'a> {
 
 impl<'a> FnCall<'a> {
     fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+        traceln!("FnCall::parse");
         let code = tokens.code();
         // Check for identifier followed by an opening paren
         let (Kind::Identifier, "(") = (tokens.peek(*at).kind(), tokens.peek(*at + 1).as_str(code))
@@ -334,8 +344,8 @@ pub struct Ast<'a> {
 }
 
 fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>, Error> {
-    eprintln!(
-        "parse_factor called, token: {}",
+    traceln!(
+        "parse_factor, token: {}",
         tokens.peek(*at).as_str(tokens.code())
     );
     if tokens.peek(*at).as_str(tokens.code()) == "(" {
@@ -354,6 +364,7 @@ fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>
 }
 
 fn parse_parenthesized<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>, Error> {
+    traceln!("parse_parenthesized");
     tokens.consume_one_of(at, &["("])?;
     let expr = parse_expression(tokens, at);
     tokens.consume_one_of(at, &[")"])?;
@@ -367,7 +378,7 @@ fn parse_binary_expr_left<'a>(
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
 ) -> Result<Expression<'a>, Error> {
     let code = tokens.code();
-    eprintln!(
+    traceln!(
         "parse_binary_expr_left for {ops:?}, token: {:?} at {at}",
         tokens.peek(*at).as_str(tokens.code())
     );
@@ -410,7 +421,7 @@ fn parse_assignment_expr_right<'a>(
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
 ) -> Result<Expression<'a>, Error> {
     let code = tokens.code();
-    eprintln!(
+    traceln!(
         "parse_assignment_expr_right (=), token: {:?} at {at}",
         tokens.peek(*at).as_str(tokens.code())
     );
@@ -447,7 +458,7 @@ fn parse_unary_expr<'a>(
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
 ) -> Result<Expression<'a>, Error> {
     let code = tokens.code();
-    eprintln!(
+    traceln!(
         "parse_unary_expr for {ops:?}, token: {:?} at {at}",
         tokens.peek(*at).as_str(tokens.code())
     );
@@ -493,6 +504,7 @@ fn parse_expression<'a>(tokens: &'a Tokens<'_>, at: &mut usize) -> Result<Expres
 
 impl Tokens<'_> {
     fn consume(&self, at: &mut usize) -> Token {
+        traceln!("Tokens::consume, at = {}", *at);
         let token = self.peek(*at);
         *at += 1;
         token
@@ -513,15 +525,20 @@ impl Tokens<'_> {
 }
 
 pub fn parse<'a>(tokens: &'a Tokens) -> Result<Ast<'a>, Error> {
+    start_trace!("Parser");
     let mut at = 0;
     let root = parse_expression(tokens, &mut at)?;
+    end_trace!();
+
+    if config::verbose() {
+        dbg!(&root);
+    }
 
     let kind = tokens.peek(at).kind();
     if kind != Kind::End {
         return Err(Error::ExpectedEnd(kind));
     }
 
-    dbg!(&root);
     Ok(Ast {
         tree: Box::new(root),
     })

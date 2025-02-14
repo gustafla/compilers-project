@@ -453,7 +453,7 @@ fn parse_expression_error2() {
 
 #[test]
 fn parse_expression_error3() {
-    let code = "if true then a = y = x else xd -"; // TODO: fix this bug
+    let code = "if true then a = y = x else xd -";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens);
     assert!(expression.is_err());

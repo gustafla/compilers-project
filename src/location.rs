@@ -41,6 +41,6 @@ impl From<Range<usize>> for Location {
 
 impl Default for Location {
     fn default() -> Self {
-        (0..1).into()
+        (0..0).into()
     }
 }

@@ -1,15 +1,23 @@
 macro_rules! start_trace {
     ($label: literal) => {
         if crate::config::verbose() {
-            eprint!("\n{}:", $label);
+            eprintln!("{}:", $label);
         }
     };
 }
 
 macro_rules! trace {
-    ($value: expr) => {
+    ($($arg:tt)*) => {
         if crate::config::verbose() {
-            eprint!(" {}", $value);
+            eprint!($($arg)*);
+        }
+    };
+}
+
+macro_rules! traceln {
+    ($($arg:tt)*) => {
+        if crate::config::verbose() {
+            eprintln!($($arg)*);
         }
     };
 }
@@ -25,3 +33,4 @@ macro_rules! end_trace {
 pub(crate) use end_trace;
 pub(crate) use start_trace;
 pub(crate) use trace;
+pub(crate) use traceln;

@@ -75,8 +75,7 @@ impl Tokens<'_> {
             Some(token) => token,
             None => Token::end(
                 self.last()
-                    .map(Token::location)
-                    .cloned()
+                    .map(|last| Location::from(last.location().end()..last.location().end()))
                     .unwrap_or_default(),
             ),
         }
@@ -167,7 +166,7 @@ pub fn tokenize(code: &str) -> Result<Tokens<'_>, Error> {
                 assert_eq!(mat.start(), 0);
             }
 
-            trace!(mat.as_str());
+            trace!("{}", mat.as_str());
 
             // Store the match
             if let Some(kind) = *kind {
