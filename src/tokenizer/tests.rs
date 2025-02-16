@@ -25,7 +25,7 @@ impl PartialEq<&[(&str, Kind)]> for Tokens<'_> {
 }
 
 #[test]
-fn tokenizer_basics() {
+fn basics() {
     let code = r#"while 1 + 11*123"#;
     let tokens = tokenize(code).unwrap();
     assert_eq!(
@@ -53,14 +53,14 @@ fn tokenizer_basics() {
 }
 
 #[test]
-fn tokenizer_unrecognized() {
+fn unrecognized() {
     let code = "$";
     let result = tokenize(code);
     assert!(matches!(result, Err(Error::NoMatch(_))));
 }
 
 #[test]
-fn tokenizer_operators() {
+fn operators() {
     let code = "+-*/===!=<<=>>=";
     let tokens = tokenize(code).unwrap();
     assert_eq!(
@@ -82,7 +82,7 @@ fn tokenizer_operators() {
 }
 
 #[test]
-fn tokenizer_punctuation() {
+fn punctuation() {
     let code = r#"int main(int argc, char **argv) {
     printf("Hello World!");
     return 0;
@@ -117,7 +117,7 @@ fn tokenizer_punctuation() {
 }
 
 #[test]
-fn tokenizer_comment() {
+fn comment() {
     let code = r#"while 1 do // This is a comment
     thing"#;
     let tokens = tokenize(code).unwrap();
@@ -176,7 +176,7 @@ rust//wow"#;
 }
 
 #[test]
-fn tokenizer_line_numbers() {
+fn line_numbers() {
     let code = r#"while 1 do // This is a comment
     thing
     thing2
@@ -211,7 +211,7 @@ fn tokenizer_line_numbers() {
 }
 
 #[test]
-fn tokenizer_column_numbers() {
+fn column_numbers() {
     let code = r#"int main(int argc, char **argv) {
     printf("Hello World!");
     return 0;
