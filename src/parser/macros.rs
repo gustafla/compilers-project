@@ -1,7 +1,7 @@
 #![allow(unused_macros, reason = "Does not matter, macros defined for testing")]
 
 macro_rules! ast {
-    {$e: expr $(,)?} => {Ast {tree: Box::new($e)}};
+    {$e: expr $(,)?} => {Ast {location: Default::default(), tree: Box::new($e)}};
 }
 
 macro_rules! op {

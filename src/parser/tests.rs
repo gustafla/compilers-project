@@ -63,6 +63,7 @@ impl PartialEq for Expression<'_> {
 
 impl PartialEq for Ast<'_> {
     fn eq(&self, other: &Self) -> bool {
+        // Ignore location
         self.tree == other.tree
     }
 }

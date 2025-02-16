@@ -8,6 +8,7 @@ use crate::{
     config,
     tokenizer::{Kind, Token, Tokens},
     trace::{end_trace, start_trace, traceln},
+    Location,
 };
 use std::{fmt::Display, num::ParseIntError, str::ParseBoolError};
 use thiserror::Error;
@@ -231,8 +232,10 @@ impl<'a> Conditional<'a> {
         tokens.consume(at);
 
         // <condition>
+        let location = tokens.peek(*at).location().clone();
         let condition = match parse_expression(tokens, at) {
             Ok(expr) => Ast {
+                location,
                 tree: Box::new(expr),
             },
             Err(e) => return Some(Err(e)),
@@ -245,8 +248,10 @@ impl<'a> Conditional<'a> {
         }
 
         // <then>
+        let location = tokens.peek(*at).location().clone();
         let then_expr = match parse_expression(tokens, at) {
             Ok(expr) => Ast {
+                location,
                 tree: Box::new(expr),
             },
             Err(e) => return Some(Err(e)),
@@ -256,9 +261,10 @@ impl<'a> Conditional<'a> {
         let token = tokens.peek(*at);
         let else_expr = if token.kind() == Kind::Identifier && token.as_str(code) == "else" {
             // <else>
-            tokens.consume(at);
+            let location = tokens.consume(at).location().clone();
             match parse_expression(tokens, at) {
                 Ok(expr) => Some(Ast {
+                    location,
                     tree: Box::new(expr),
                 }),
                 Err(e) => return Some(Err(e)),
@@ -347,6 +353,7 @@ impl<'a> Block<'a> {
 
         while tokens.consume_one_of(at, &["}"]).is_err() {
             // Only blocks can contain variable declarations, try them first
+            let location = tokens.peek(*at).location().clone();
             let expr = match Var::parse(tokens, at) {
                 Some(Ok(var)) => Expression::Var(var),
                 Some(Err(e)) => return Some(Err(e)),
@@ -356,6 +363,7 @@ impl<'a> Block<'a> {
                 },
             };
             let expr = Ast {
+                location,
                 tree: Box::new(expr),
             };
             // TODO: What if variable declaration is result expr?
@@ -421,8 +429,10 @@ impl<'a> Var<'a> {
         };
 
         // <init>
+        let location = tokens.peek(*at).location().clone();
         let init = match parse_expression(tokens, at) {
             Ok(expr) => Ast {
+                location,
                 tree: Box::new(expr),
             },
             Err(e) => return Some(Err(e)),
@@ -446,7 +456,8 @@ pub enum Expression<'a> {
 
 #[derive(Debug)]
 pub struct Ast<'a> {
-    // location: Location,
+    // TODO: Make parsed locations include the whole range in the subtree, not just one token
+    location: Location,
     tree: Box<Expression<'a>>,
 }
 
@@ -493,6 +504,7 @@ fn parse_binary_expr_left<'a>(
     );
 
     // Accumulate tree into left
+    let mut location = tokens.peek(*at).location().clone();
     let mut left = parse_term_fn(tokens, at)?;
 
     let result = loop {
@@ -505,6 +517,7 @@ fn parse_binary_expr_left<'a>(
             Err(e) => break Err(e),
         };
 
+        let right_loc = tokens.peek(*at).location().clone();
         let right = match parse_term_fn(tokens, at) {
             Ok(expr) => expr,
             Err(e) => break Err(e),
@@ -512,13 +525,16 @@ fn parse_binary_expr_left<'a>(
 
         left = Expression::BinaryOp(BinaryOp {
             left: Ast {
+                location,
                 tree: Box::new(left),
             },
             op,
             right: Ast {
+                location: right_loc.clone(),
                 tree: Box::new(right),
             },
         });
+        location = right_loc;
     };
 
     result
@@ -536,25 +552,34 @@ fn parse_assignment_expr_right<'a>(
     );
 
     let mut terms = Vec::new();
-    terms.push(parse_term_fn(tokens, at)?);
+    terms.push((
+        tokens.peek(*at).location().clone(),
+        parse_term_fn(tokens, at)?,
+    ));
 
     while tokens.peek(*at).as_str(code) == "=" {
         tokens.consume(at);
-        terms.push(parse_term_fn(tokens, at)?);
+        terms.push((
+            tokens.peek(*at).location().clone(),
+            parse_term_fn(tokens, at)?,
+        ));
     }
 
-    let mut right = terms.pop().unwrap();
+    let (mut right_loc, mut right) = terms.pop().unwrap();
 
-    while let Some(expr) = terms.pop() {
+    while let Some((location, expr)) = terms.pop() {
         right = Expression::BinaryOp(BinaryOp {
             left: Ast {
+                location: location.clone(),
                 tree: Box::new(expr),
             },
             op: Op::Assign,
             right: Ast {
+                location: right_loc,
                 tree: Box::new(right),
             },
         });
+        right_loc = location
     }
 
     Ok(right)
@@ -574,18 +599,21 @@ fn parse_unary_expr<'a>(
 
     let mut op = Vec::new();
     while ops.contains(&tokens.peek(*at).as_str(code)) {
-        op.push(Op::parse(tokens, at)?);
+        op.push((tokens.peek(*at).location().clone(), Op::parse(tokens, at)?));
     }
 
+    let mut location = tokens.peek(*at).location().clone();
     let mut expr = parse_term_fn(tokens, at)?;
 
-    while let Some(op) = op.pop() {
+    while let Some((sign_loc, op)) = op.pop() {
         expr = Expression::UnaryOp(UnaryOp {
             op,
             right: Ast {
+                location,
                 tree: Box::new(expr),
             },
         });
+        location = sign_loc;
     }
 
     Ok(expr)
@@ -653,6 +681,11 @@ pub fn parse<'a>(tokens: &'a Tokens) -> Result<Ast<'a>, Error> {
     }
 
     Ok(Ast {
+        location: tokens
+            .first()
+            .map(Token::location)
+            .cloned()
+            .unwrap_or_default(),
         tree: Box::new(root),
     })
 }
