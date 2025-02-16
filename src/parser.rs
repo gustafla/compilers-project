@@ -254,7 +254,7 @@ impl<'a> Conditional<'a> {
 
         // Else
         let token = tokens.peek(*at);
-        let else_expr = if token.kind() == Kind::Identifier || token.as_str(code) == "else" {
+        let else_expr = if token.kind() == Kind::Identifier && token.as_str(code) == "else" {
             // <else>
             tokens.consume(at);
             match parse_expression(tokens, at) {
@@ -336,6 +336,7 @@ pub struct Block<'a> {
 impl<'a> Block<'a> {
     fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
         traceln!("Block::parse");
+        let code = tokens.code();
 
         if tokens.consume_one_of(at, &["{"]).is_err() {
             return None;
@@ -365,9 +366,8 @@ impl<'a> Block<'a> {
                     break;
                 }
 
-                match expr.tree.as_ref() {
-                    Expression::Block(..) => { /* Omitted semicolon is allowed for blocks */ }
-                    _ => return Some(Err(e)),
+                if tokens.peek(*at - 1).as_str(code) != "}" {
+                    return Some(Err(e));
                 }
             };
 
@@ -613,8 +613,12 @@ fn parse_expression<'a>(tokens: &'a Tokens<'_>, at: &mut usize) -> Result<Expres
 
 impl Tokens<'_> {
     fn consume(&self, at: &mut usize) -> Token {
-        traceln!("Tokens::consume, at = {}", *at);
         let token = self.peek(*at);
+        traceln!(
+            "Tokens::consume, at = {}, token = {:?}",
+            *at,
+            token.as_str(self.code())
+        );
         *at += 1;
         token
     }
