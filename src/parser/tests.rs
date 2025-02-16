@@ -68,7 +68,7 @@ impl PartialEq for Ast<'_> {
 }
 
 #[test]
-fn parse_expression_basic() {
+fn basic() {
     let code = "1 + 1";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -76,7 +76,7 @@ fn parse_expression_basic() {
 }
 
 #[test]
-fn parse_expression_error0() {
+fn error0() {
     let code = "a + b c";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens);
@@ -84,7 +84,7 @@ fn parse_expression_error0() {
 }
 
 #[test]
-fn parse_expression_precedence_basic() {
+fn precedence_basic() {
     let code = "1+2+3";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -123,7 +123,7 @@ fn parse_expression_precedence_basic() {
 }
 
 #[test]
-fn parse_expression_paren() {
+fn paren() {
     let code = "1+(2+3)";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -144,7 +144,7 @@ fn parse_expression_paren() {
 }
 
 #[test]
-fn parse_expression_with_identifiers() {
+fn identifiers() {
     let code = "a+b*c";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -165,7 +165,7 @@ fn parse_expression_with_identifiers() {
 }
 
 #[test]
-fn parse_expression_with_conditional() {
+fn conditional() {
     let code = "if a then 1 + 1";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -185,7 +185,7 @@ fn parse_expression_with_conditional() {
 }
 
 #[test]
-fn parse_binary_op_with_conditional() {
+fn binary_op_with_conditional() {
     let code = "1 + if true then 2 else 3";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -206,7 +206,7 @@ fn parse_binary_op_with_conditional() {
 }
 
 #[test]
-fn parse_expression_with_nested_conditional() {
+fn nested_conditional() {
     let code = "if if condition then a else b then if if a then a else b then 32 else 42";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -234,7 +234,7 @@ fn parse_expression_with_nested_conditional() {
 }
 
 #[test]
-fn parse_expression_with_fn_call() {
+fn fn_call() {
     let code = "5 - add(1, 1)";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -251,7 +251,7 @@ fn parse_expression_with_fn_call() {
 }
 
 #[test]
-fn parse_expression_with_nested_fn_call() {
+fn nested_fn_call() {
     let code = r#"printf("Error at packet %d: %s (context: %s)\n", packet, SDL_GetError(), describe_context(context))"#;
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -270,7 +270,7 @@ fn parse_expression_with_nested_fn_call() {
 }
 
 #[test]
-fn parse_expression_assignment() {
+fn assignment() {
     let code = "a = b = c";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -291,7 +291,7 @@ fn parse_expression_assignment() {
 }
 
 #[test]
-fn parse_expression_complex() {
+fn complex() {
     let code = "if true or false and foo then a = b = 1+2*sqrt(2)";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -331,7 +331,7 @@ fn parse_expression_complex() {
 }
 
 #[test]
-fn parse_expression_unary() {
+fn unary() {
     let code = "if not foo then -1 else -2";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -348,7 +348,7 @@ fn parse_expression_unary() {
 }
 
 #[test]
-fn parse_expression_nested_unary() {
+fn nested_unary() {
     let code = "if not not not not foo then --1 else -----2";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -365,7 +365,7 @@ fn parse_expression_nested_unary() {
 }
 
 #[test]
-fn parse_expression_precedence_complex() {
+fn precedence_complex() {
     let code =
         "- if true then a = 1 or 1 and 1 == 1 != 1 < 1 <= 1 > 1 >= 1 + 1 - 1 * 1 / 1 % -1 = x else xd";
     let tokens = tokenizer::tokenize(code).unwrap();
@@ -448,7 +448,7 @@ fn parse_expression_precedence_complex() {
 }
 
 #[test]
-fn parse_expression_error1() {
+fn error1() {
     let code = "- if true then a = y = x not else xd";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens);
@@ -456,7 +456,7 @@ fn parse_expression_error1() {
 }
 
 #[test]
-fn parse_expression_error2() {
+fn error2() {
     let code = "+ if true then a = y = x else xd";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens);
@@ -464,7 +464,7 @@ fn parse_expression_error2() {
 }
 
 #[test]
-fn parse_expression_error3() {
+fn error3() {
     let code = "if true then a = y = x else xd -";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens);
@@ -472,7 +472,7 @@ fn parse_expression_error3() {
 }
 
 #[test]
-fn parse_expression_error4() {
+fn error4() {
     let code = "if true then a++ else xd";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens);
@@ -480,7 +480,7 @@ fn parse_expression_error4() {
 }
 
 #[test]
-fn parse_expression_with_block() {
+fn block() {
     let code = "if ok then {fn1(); fn2(); exit(0);} else {exit(1)}";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -503,7 +503,7 @@ fn parse_expression_with_block() {
 }
 
 #[test]
-fn parse_expression_with_var() {
+fn var() {
     let code = "if ok then {fn1(); fn2(); exit(0);} else {var retval = errno + 1; exit(retval)}";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -527,7 +527,7 @@ fn parse_expression_with_var() {
 }
 
 #[test]
-fn parse_expression_with_semicolons_omitted_in_nested_block() {
+fn semicolons_omitted_in_nested_block() {
     let code = "if ok then {{fn1()} {fn2()} {exit(0)};} else {exit(1)}";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -550,7 +550,7 @@ fn parse_expression_with_semicolons_omitted_in_nested_block() {
 }
 
 #[test]
-fn parse_expression_task7_case0() {
+fn omitted_semicolon_case0() {
     let code = "{{x}{y}}";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -569,7 +569,7 @@ fn parse_expression_task7_case0() {
 }
 
 #[test]
-fn parse_expression_task7_case1() {
+fn omitted_semicolon_case1() {
     let code = "{a b }";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens);
@@ -577,7 +577,7 @@ fn parse_expression_task7_case1() {
 }
 
 #[test]
-fn parse_expression_task7_case2() {
+fn omitted_semicolon_case2() {
     let code = "{ if true then { a } b }";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -595,7 +595,7 @@ fn parse_expression_task7_case2() {
 }
 
 #[test]
-fn parse_expression_task7_case3() {
+fn omitted_semicolon_case3() {
     let code = "{ if true then { a }; b }";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -613,7 +613,7 @@ fn parse_expression_task7_case3() {
 }
 
 #[test]
-fn parse_expression_task7_case4() {
+fn omitted_semicolon_case4() {
     let code = "{ if true then { a } b c }";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens);
@@ -621,7 +621,7 @@ fn parse_expression_task7_case4() {
 }
 
 #[test]
-fn parse_expression_task7_case5() {
+fn omitted_semicolon_case5() {
     let code = "{ if true then { a } b; c }";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -640,7 +640,7 @@ fn parse_expression_task7_case5() {
 }
 
 #[test]
-fn parse_expression_task7_case6() {
+fn omitted_semicolon_case6() {
     let code = "{ if true then { a } else { b } c }";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -659,7 +659,7 @@ fn parse_expression_task7_case6() {
 }
 
 #[test]
-fn parse_expression_task7_case7() {
+fn omitted_semicolon_case7() {
     let code = "x = { { f(a) } { b } }";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
@@ -679,7 +679,7 @@ fn parse_expression_task7_case7() {
 }
 
 #[test]
-fn parse_expression_with_deeply_nested_blocks() {
+fn deeply_nested_blocks() {
     let code = "{{a}call();{{{{b}}}}if{{c}}then{happy()}else{edge_case()}}";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
