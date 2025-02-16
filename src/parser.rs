@@ -365,7 +365,10 @@ impl<'a> Block<'a> {
                     break;
                 }
 
-                return Some(Err(e));
+                match expr.tree.as_ref() {
+                    Expression::Block(..) => { /* Omitted semicolon is allowed for blocks */ }
+                    _ => return Some(Err(e)),
+                }
             };
 
             expressions.push(expr);

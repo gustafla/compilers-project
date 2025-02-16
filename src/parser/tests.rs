@@ -525,3 +525,175 @@ fn parse_expression_with_var() {
         }
     )
 }
+
+#[test]
+fn parse_expression_with_semicolons_omitted_in_nested_block() {
+    let code = "if ok then {{fn1()} {fn2()} {exit(0)};} else {exit(1)}";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! {
+            con! {
+                id!("ok"),
+                blk! {
+                    blk!{,fun!("fn1")};
+                    blk!{,fun!("fn2")};
+                    blk!{,fun!("exit", int!(0))};
+                },
+                blk! {
+                    , fun!("exit", int!(1))
+                }
+            }
+        }
+    )
+}
+
+#[test]
+fn parse_expression_task7_case0() {
+    let code = "{{x}{y}}";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! { blk! { blk!{,id!("x")}, blk!{,id!("y")} } }
+    );
+
+    let code = "{{a}{x}{y}}";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! { blk! { blk!{,id!("a")}; blk!{,id!("x")}, blk!{,id!("y")} } }
+    );
+}
+
+#[test]
+fn parse_expression_task7_case1() {
+    let code = "{a b }";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens);
+    assert!(matches!(expression, Err(..)));
+}
+
+#[test]
+fn parse_expression_task7_case2() {
+    let code = "{ if true then { a } b }";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! {
+        blk!{
+            con!{
+                tru!(),
+                blk!{, id!("a")},
+            },
+            id!("b")
+        }}
+    );
+}
+
+#[test]
+fn parse_expression_task7_case3() {
+    let code = "{ if true then { a }; b }";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! {
+        blk!{
+            con!{
+                tru!(),
+                blk!{, id!("a")},
+            },
+            id!("b")
+        }}
+    );
+}
+
+#[test]
+fn parse_expression_task7_case4() {
+    let code = "{ if true then { a } b c }";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens);
+    assert!(matches!(expression, Err(..)));
+}
+
+#[test]
+fn parse_expression_task7_case5() {
+    let code = "{ if true then { a } b; c }";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! {
+        blk!{
+            con!{
+                tru!(),
+                blk!{, id!("a")},
+            };
+            id!("b"),
+            id!("c")
+        }}
+    );
+}
+
+#[test]
+fn parse_expression_task7_case6() {
+    let code = "{ if true then { a } else { b } c }";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! {
+        blk!{
+            con!{
+                tru!(),
+                blk!{, id!("a")},
+                blk!{, id!("b")},
+            },
+            id!("c")
+        }}
+    );
+}
+
+#[test]
+fn parse_expression_task7_case7() {
+    let code = "x = { { f(a) } { b } }";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! {
+            op! {
+                id!("x"),
+                Op::Assign,
+                blk!{
+                    blk!{,fun!("f", id!("a"))},
+                    blk!{,id!("b")}
+                }
+            }
+        }
+    );
+}
+
+#[test]
+fn parse_expression_with_deeply_nested_blocks() {
+    let code = "{{a}call();{{{{b}}}}if{{c}}then{happy()}else{edge_case()}}";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        ast! { blk! {
+            blk!{,id!("a")};
+            fun!("call");
+            blk!{,blk!{,blk!{,blk!{,id!("b")}}}},
+            con!{
+                blk!{,blk!{,id!("c")}},
+                blk!{,fun!("happy")},
+                blk!{,fun!("edge_case")},
+            }
+        }}
+    );
+}
