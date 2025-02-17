@@ -2,6 +2,7 @@
 
 #[macro_use]
 mod macros;
+mod op;
 mod tests;
 
 use crate::{
@@ -10,7 +11,8 @@ use crate::{
     trace::{end_trace, start_trace, traceln},
     Location,
 };
-use std::{fmt::Display, num::ParseIntError, str::ParseBoolError};
+use op::Op;
+use std::{num::ParseIntError, str::ParseBoolError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -43,6 +45,24 @@ pub enum Error {
     },
 }
 
+#[derive(Debug)]
+pub enum Expression<'a> {
+    Literal(Literal<'a>),
+    Identifier(Identifier<'a>),
+    Conditional(Conditional<'a>),
+    FnCall(FnCall<'a>),
+    Block(Block<'a>),
+    Var(Var<'a>),
+    BinaryOp(BinaryOp<'a>),
+    UnaryOp(UnaryOp<'a>),
+}
+
+#[derive(Debug)]
+pub struct Ast<'a> {
+    location: Location,
+    tree: Box<Expression<'a>>,
+}
+
 type Int = i64;
 
 #[derive(Debug, PartialEq)]
@@ -53,18 +73,18 @@ pub enum Literal<'a> {
 }
 
 impl<'a> Literal<'a> {
-    pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+    pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
         traceln!("Literal::parse");
         let code = tokens.code();
         let token = tokens.peek(*at);
 
         let result = match token.kind() {
             Kind::Identifier => match token.as_str(code).parse::<bool>() {
-                Ok(boolean) => Ok(Literal::Bool(boolean)),
+                Ok(boolean) => Ok(Self::Bool(boolean)),
                 Err(..) => return None, // No error, there are other identifiers than true and false
             },
             Kind::Integer => match token.as_str(code).parse::<Int>() {
-                Ok(i) => Ok(Literal::Int(i)),
+                Ok(i) => Ok(Self::Int(i)),
                 Err(source) => Err(Error::Int {
                     token: token.as_str(code).into(),
                     source,
@@ -73,12 +93,15 @@ impl<'a> Literal<'a> {
             Kind::StrLiteral => {
                 let unquoted = &token.as_str(code)[1..token.len() - 1];
                 // TODO: Process escape syntax like \"\" and \\
-                Ok(Literal::Str(unquoted))
+                Ok(Self::Str(unquoted))
             }
             _ => return None,
         };
         let _ = tokens.consume(at);
-        Some(result)
+        Some(result.map(|lit| Ast {
+            location: token.location().clone(),
+            tree: Box::new(Expression::Literal(lit)),
+        }))
     }
 }
 
@@ -88,7 +111,7 @@ pub struct Identifier<'a> {
 }
 
 impl<'a> Identifier<'a> {
-    pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Self> {
+    pub fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Ast<'a>> {
         traceln!("Identifier::parse");
         let code = tokens.code();
         let token = tokens.peek(*at);
@@ -97,119 +120,13 @@ impl<'a> Identifier<'a> {
         }
 
         let token = tokens.consume(at);
-        Some(Self {
-            name: token.as_str(code),
+        Some(Ast {
+            location: token.location().clone(),
+            tree: Box::new(Expression::Identifier(Self {
+                name: token.as_str(code),
+            })),
         })
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Op {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-    Eq,
-    Ne,
-    Leq,
-    Lt,
-    Geq,
-    Gt,
-    And,
-    Or,
-    Not,
-    Assign,
-}
-
-impl Op {
-    pub fn parse(tokens: &Tokens, at: &mut usize) -> Result<Self, Error> {
-        let code = tokens.code();
-        let token = tokens.peek(*at);
-        traceln!("Op::parse, token = {token:?}");
-        let op = match token.as_str(code) {
-            "+" => Op::Add,
-            "-" => Op::Sub,
-            "*" => Op::Mul,
-            "/" => Op::Div,
-            "%" => Op::Rem,
-            "==" => Op::Eq,
-            "!=" => Op::Ne,
-            "<=" => Op::Leq,
-            "<" => Op::Lt,
-            ">=" => Op::Geq,
-            ">" => Op::Gt,
-            "and" => Op::And,
-            "or" => Op::Or,
-            "not" => Op::Not,
-            "=" => Op::Assign,
-            str => {
-                return Err(Error::ExpectedOneOf {
-                    of: vec![
-                        "+".into(),
-                        "-".into(),
-                        "*".into(),
-                        "/".into(),
-                        "%".into(),
-                        "==".into(),
-                        "!=".into(),
-                        "<=".into(),
-                        "<".into(),
-                        ">=".into(),
-                        ">".into(),
-                        "and".into(),
-                        "or".into(),
-                        "not".into(),
-                        "=".into(),
-                    ],
-                    token: str.into(),
-                })
-            }
-        };
-        traceln!("consuming...");
-
-        tokens.consume(at);
-        Ok(op)
-    }
-}
-
-impl Display for Op {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Op::Add => "+",
-                Op::Sub => "-",
-                Op::Mul => "*",
-                Op::Div => "/",
-                Op::Rem => "%",
-                Op::Eq => "==",
-                Op::Ne => "!=",
-                Op::Leq => "<=",
-                Op::Lt => "<",
-                Op::Geq => ">=",
-                Op::Gt => ">",
-                Op::And => "and",
-                Op::Or => "or",
-                Op::Not => "not",
-                Op::Assign => "=",
-            }
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct BinaryOp<'a> {
-    left: Ast<'a>,
-    op: Op,
-    right: Ast<'a>,
-}
-
-#[derive(Debug)]
-pub struct UnaryOp<'a> {
-    op: Op,
-    right: Ast<'a>,
 }
 
 #[derive(Debug)]
@@ -220,7 +137,7 @@ pub struct Conditional<'a> {
 }
 
 impl<'a> Conditional<'a> {
-    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
         traceln!("Conditional::parse");
         let code = tokens.code();
 
@@ -229,15 +146,12 @@ impl<'a> Conditional<'a> {
         if token.kind() != Kind::Identifier || token.as_str(code) != "if" {
             return None;
         }
+        let start = token.location().start();
         tokens.consume(at);
 
         // <condition>
-        let location = tokens.peek(*at).location().clone();
         let condition = match parse_expression(tokens, at) {
-            Ok(expr) => Ast {
-                location,
-                tree: Box::new(expr),
-            },
+            Ok(ast) => ast,
             Err(e) => return Some(Err(e)),
         };
 
@@ -248,12 +162,8 @@ impl<'a> Conditional<'a> {
         }
 
         // <then>
-        let location = tokens.peek(*at).location().clone();
         let then_expr = match parse_expression(tokens, at) {
-            Ok(expr) => Ast {
-                location,
-                tree: Box::new(expr),
-            },
+            Ok(ast) => ast,
             Err(e) => return Some(Err(e)),
         };
 
@@ -261,46 +171,44 @@ impl<'a> Conditional<'a> {
         let token = tokens.peek(*at);
         let else_expr = if token.kind() == Kind::Identifier && token.as_str(code) == "else" {
             // <else>
-            let location = tokens.consume(at).location().clone();
+            tokens.consume(at);
             match parse_expression(tokens, at) {
-                Ok(expr) => Some(Ast {
-                    location,
-                    tree: Box::new(expr),
-                }),
+                Ok(ast) => Some(ast),
                 Err(e) => return Some(Err(e)),
             }
         } else {
             None
         };
 
-        Some(Ok(Conditional {
-            condition,
-            then_expr,
-            else_expr,
+        let end = tokens.peek(*at - 1).location().end();
+        Some(Ok(Ast {
+            location: (start..end).into(),
+            tree: Box::new(Expression::Conditional(Conditional {
+                condition,
+                then_expr,
+                else_expr,
+            })),
         }))
     }
 }
 
 #[derive(Debug)]
 pub struct FnCall<'a> {
-    function: Identifier<'a>,
-    arguments: Vec<Expression<'a>>,
+    function: Ast<'a>,
+    arguments: Vec<Ast<'a>>,
 }
 
 impl<'a> FnCall<'a> {
-    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
         traceln!("FnCall::parse");
         let code = tokens.code();
         // Check for identifier followed by an opening paren
-        let (Kind::Identifier, "(") = (tokens.peek(*at).kind(), tokens.peek(*at + 1).as_str(code))
-        else {
+        let (t0, t1) = (tokens.peek(*at), tokens.peek(*at + 1));
+        let (Kind::Identifier, "(") = (t0.kind(), t1.as_str(code)) else {
             return None;
         };
-
-        let token = tokens.consume(at);
-        let function = Identifier {
-            name: token.as_str(code),
-        };
+        let start = t0.location().start();
+        let function = Identifier::parse(tokens, at).unwrap();
 
         // Consume opening paren
         tokens.consume(at);
@@ -313,7 +221,7 @@ impl<'a> FnCall<'a> {
                 break;
             }
             let arg = match parse_expression(tokens, at) {
-                Ok(expr) => expr,
+                Ok(ast) => ast,
                 Err(e) => return Some(Err(e)),
             };
             arguments.push(arg);
@@ -326,9 +234,13 @@ impl<'a> FnCall<'a> {
             }
         }
 
-        Some(Ok(Self {
-            function,
-            arguments,
+        let end = tokens.peek(*at - 1).location().end();
+        Some(Ok(Ast {
+            location: (start..end).into(),
+            tree: Box::new(Expression::FnCall(Self {
+                function,
+                arguments,
+            })),
         }))
     }
 }
@@ -340,9 +252,10 @@ pub struct Block<'a> {
 }
 
 impl<'a> Block<'a> {
-    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
         traceln!("Block::parse");
         let code = tokens.code();
+        let start = tokens.peek(*at).location().start();
 
         if tokens.consume_one_of(at, &["{"]).is_err() {
             return None;
@@ -353,24 +266,18 @@ impl<'a> Block<'a> {
 
         while tokens.consume_one_of(at, &["}"]).is_err() {
             // Only blocks can contain variable declarations, try them first
-            let location = tokens.peek(*at).location().clone();
-            let expr = match Var::parse(tokens, at) {
-                Some(Ok(var)) => Expression::Var(var),
+            let ast = match Var::parse(tokens, at) {
+                Some(Ok(ast)) => ast,
                 Some(Err(e)) => return Some(Err(e)),
                 None => match parse_expression(tokens, at) {
-                    Ok(expr) => expr,
+                    Ok(ast) => ast,
                     Err(e) => return Some(Err(e)),
                 },
             };
-            let expr = Ast {
-                location,
-                tree: Box::new(expr),
-            };
-            // TODO: What if variable declaration is result expr?
 
             if let Err(e) = tokens.consume_one_of(at, &[";"]) {
                 if tokens.consume_one_of(at, &["}"]).is_ok() {
-                    result = Some(expr);
+                    result = Some(ast);
                     break;
                 }
 
@@ -379,24 +286,28 @@ impl<'a> Block<'a> {
                 }
             };
 
-            expressions.push(expr);
+            expressions.push(ast);
         }
 
-        Some(Ok(Self {
-            expressions,
-            result,
+        let end = tokens.peek(*at - 1).location().end();
+        Some(Ok(Ast {
+            location: (start..end).into(),
+            tree: Box::new(Expression::Block(Self {
+                expressions,
+                result,
+            })),
         }))
     }
 }
 
 #[derive(Debug)]
 pub struct Var<'a> {
-    id: Identifier<'a>,
+    id: Ast<'a>,
     init: Ast<'a>,
 }
 
 impl<'a> Var<'a> {
-    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Self, Error>> {
+    fn parse(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
         traceln!("Var::parse");
         let code = tokens.code();
 
@@ -405,6 +316,7 @@ impl<'a> Var<'a> {
         if token.kind() != Kind::Identifier || token.as_str(code) != "var" {
             return None;
         }
+        let start = token.location().start();
         tokens.consume(at);
 
         // _MAYBE_ parse_assignment_expr_right could be used here,
@@ -429,74 +341,66 @@ impl<'a> Var<'a> {
         };
 
         // <init>
-        let location = tokens.peek(*at).location().clone();
         let init = match parse_expression(tokens, at) {
-            Ok(expr) => Ast {
-                location,
-                tree: Box::new(expr),
-            },
+            Ok(ast) => ast,
             Err(e) => return Some(Err(e)),
         };
 
-        Some(Ok(Self { id, init }))
+        let end = tokens.peek(*at - 1).location().end();
+        Some(Ok(Ast {
+            location: (start..end).into(),
+            tree: Box::new(Expression::Var(Self { id, init })),
+        }))
     }
 }
 
-#[derive(Debug)]
-pub enum Expression<'a> {
-    Literal(Literal<'a>),
-    Identifier(Identifier<'a>),
-    BinaryOp(BinaryOp<'a>),
-    UnaryOp(UnaryOp<'a>),
-    Conditional(Conditional<'a>),
-    FnCall(FnCall<'a>),
-    Block(Block<'a>),
-    Var(Var<'a>),
-}
-
-#[derive(Debug)]
-pub struct Ast<'a> {
-    // TODO: Make parsed locations include the whole range in the subtree, not just one token
-    location: Location,
-    tree: Box<Expression<'a>>,
-}
-
-fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>, Error> {
+fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Ast<'a>, Error> {
     traceln!(
         "parse_factor, token: {}",
         tokens.peek(*at).as_str(tokens.code())
     );
     if tokens.peek(*at).as_str(tokens.code()) == "(" {
-        parse_parenthesized(tokens, at)
-    } else if let Some(res) = Block::parse(tokens, at) {
-        Ok(Expression::Block(res?))
-    } else if let Some(res) = Literal::parse(tokens, at) {
-        Ok(Expression::Literal(res?))
-    } else if let Some(res) = FnCall::parse(tokens, at) {
-        Ok(Expression::FnCall(res?))
-    } else if let Some(res) = Conditional::parse(tokens, at) {
-        Ok(Expression::Conditional(res?))
-    } else if let Some(id) = Identifier::parse(tokens, at) {
-        Ok(Expression::Identifier(id))
+        return parse_parenthesized(tokens, at);
     } else {
-        Err(Error::ExpectedTerm(tokens.peek(*at).kind()))
-    }
+        for parse_fn in [
+            Block::parse,
+            Literal::parse,
+            FnCall::parse,
+            Conditional::parse,
+        ] {
+            if let Some(res) = parse_fn(tokens, at) {
+                return res;
+            }
+        }
+        if let Some(id) = Identifier::parse(tokens, at) {
+            return Ok(id);
+        }
+    };
+
+    Err(Error::ExpectedTerm(tokens.peek(*at).kind()))
 }
 
-fn parse_parenthesized<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Expression<'a>, Error> {
+fn parse_parenthesized<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Ast<'a>, Error> {
     traceln!("parse_parenthesized");
     tokens.consume_one_of(at, &["("])?;
-    let expr = parse_expression(tokens, at);
+    let res = parse_expression(tokens, at);
     tokens.consume_one_of(at, &[")"])?;
-    expr
+    res
+}
+
+#[derive(Debug)]
+pub struct BinaryOp<'a> {
+    left: Ast<'a>,
+    op: Op,
+    right: Ast<'a>,
 }
 
 fn parse_binary_expr_left<'a>(
     tokens: &'a Tokens<'_>,
     at: &mut usize,
     ops: &[&str],
-    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
-) -> Result<Expression<'a>, Error> {
+    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Ast<'a>, Error>,
+) -> Result<Ast<'a>, Error> {
     let code = tokens.code();
     traceln!(
         "parse_binary_expr_left for {ops:?}, token: {:?} at {at}",
@@ -504,8 +408,8 @@ fn parse_binary_expr_left<'a>(
     );
 
     // Accumulate tree into left
-    let mut location = tokens.peek(*at).location().clone();
     let mut left = parse_term_fn(tokens, at)?;
+    let start = left.location.start();
 
     let result = loop {
         if !ops.contains(&tokens.peek(*at).as_str(code)) {
@@ -517,24 +421,15 @@ fn parse_binary_expr_left<'a>(
             Err(e) => break Err(e),
         };
 
-        let right_loc = tokens.peek(*at).location().clone();
         let right = match parse_term_fn(tokens, at) {
-            Ok(expr) => expr,
+            Ok(ast) => ast,
             Err(e) => break Err(e),
         };
 
-        left = Expression::BinaryOp(BinaryOp {
-            left: Ast {
-                location,
-                tree: Box::new(left),
-            },
-            op,
-            right: Ast {
-                location: right_loc.clone(),
-                tree: Box::new(right),
-            },
-        });
-        location = right_loc;
+        left = Ast {
+            location: (start..right.location.end()).into(),
+            tree: Box::new(Expression::BinaryOp(BinaryOp { left, op, right })),
+        };
     };
 
     result
@@ -543,8 +438,8 @@ fn parse_binary_expr_left<'a>(
 fn parse_assignment_expr_right<'a>(
     tokens: &'a Tokens<'_>,
     at: &mut usize,
-    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
-) -> Result<Expression<'a>, Error> {
+    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Ast<'a>, Error>,
+) -> Result<Ast<'a>, Error> {
     let code = tokens.code();
     traceln!(
         "parse_assignment_expr_right (=), token: {:?} at {at}",
@@ -552,45 +447,41 @@ fn parse_assignment_expr_right<'a>(
     );
 
     let mut terms = Vec::new();
-    terms.push((
-        tokens.peek(*at).location().clone(),
-        parse_term_fn(tokens, at)?,
-    ));
+    terms.push(parse_term_fn(tokens, at)?);
 
     while tokens.peek(*at).as_str(code) == "=" {
         tokens.consume(at);
-        terms.push((
-            tokens.peek(*at).location().clone(),
-            parse_term_fn(tokens, at)?,
-        ));
+        terms.push(parse_term_fn(tokens, at)?);
     }
 
-    let (mut right_loc, mut right) = terms.pop().unwrap();
+    let mut right = terms.pop().unwrap();
 
-    while let Some((location, expr)) = terms.pop() {
-        right = Expression::BinaryOp(BinaryOp {
-            left: Ast {
-                location: location.clone(),
-                tree: Box::new(expr),
-            },
-            op: Op::Assign,
-            right: Ast {
-                location: right_loc,
-                tree: Box::new(right),
-            },
-        });
-        right_loc = location
+    while let Some(ast) = terms.pop() {
+        right = Ast {
+            location: (ast.location.start()..right.location.end()).into(),
+            tree: Box::new(Expression::BinaryOp(BinaryOp {
+                left: ast,
+                op: Op::Assign,
+                right,
+            })),
+        };
     }
 
     Ok(right)
+}
+
+#[derive(Debug)]
+pub struct UnaryOp<'a> {
+    op: Op,
+    right: Ast<'a>,
 }
 
 fn parse_unary_expr<'a>(
     tokens: &'a Tokens<'_>,
     at: &mut usize,
     ops: &[&str],
-    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Expression<'a>, Error>,
-) -> Result<Expression<'a>, Error> {
+    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Ast<'a>, Error>,
+) -> Result<Ast<'a>, Error> {
     let code = tokens.code();
     traceln!(
         "parse_unary_expr for {ops:?}, token: {:?} at {at}",
@@ -599,27 +490,22 @@ fn parse_unary_expr<'a>(
 
     let mut op = Vec::new();
     while ops.contains(&tokens.peek(*at).as_str(code)) {
-        op.push((tokens.peek(*at).location().clone(), Op::parse(tokens, at)?));
+        op.push((tokens.peek(*at).location().start(), Op::parse(tokens, at)?));
     }
 
-    let mut location = tokens.peek(*at).location().clone();
-    let mut expr = parse_term_fn(tokens, at)?;
+    let mut ast = parse_term_fn(tokens, at)?;
 
-    while let Some((sign_loc, op)) = op.pop() {
-        expr = Expression::UnaryOp(UnaryOp {
-            op,
-            right: Ast {
-                location,
-                tree: Box::new(expr),
-            },
-        });
-        location = sign_loc;
+    while let Some((sign_start, op)) = op.pop() {
+        ast = Ast {
+            location: (sign_start..ast.location.end()).into(),
+            tree: Box::new(Expression::UnaryOp(UnaryOp { op, right: ast })),
+        };
     }
 
-    Ok(expr)
+    Ok(ast)
 }
 
-fn parse_expression<'a>(tokens: &'a Tokens<'_>, at: &mut usize) -> Result<Expression<'a>, Error> {
+fn parse_expression<'a>(tokens: &'a Tokens<'_>, at: &mut usize) -> Result<Ast<'a>, Error> {
     parse_assignment_expr_right(tokens, at, |tokens, at| {
         parse_binary_expr_left(tokens, at, &["or"], |tokens, at| {
             parse_binary_expr_left(tokens, at, &["and"], |tokens, at| {
@@ -680,12 +566,5 @@ pub fn parse<'a>(tokens: &'a Tokens) -> Result<Ast<'a>, Error> {
         return Err(Error::ExpectedEnd(kind));
     }
 
-    Ok(Ast {
-        location: tokens
-            .first()
-            .map(Token::location)
-            .cloned()
-            .unwrap_or_default(),
-        tree: Box::new(root),
-    })
+    Ok(root)
 }
