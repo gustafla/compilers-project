@@ -1,3 +1,4 @@
+mod ast;
 mod config;
 mod location;
 mod parser;

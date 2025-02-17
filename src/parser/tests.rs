@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use crate::tokenizer;
+use crate::{ast::macros::*, tokenizer};
 
 impl PartialEq for Expression<'_> {
     fn eq(&self, other: &Self) -> bool {

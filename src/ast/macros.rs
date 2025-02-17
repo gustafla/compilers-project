@@ -1,5 +1,3 @@
-#![allow(unused_macros, reason = "Does not matter, macros defined for testing")]
-
 macro_rules! ast {
     {$e: expr $(,)?} => {Ast {location: Default::default(), tree: Box::new($e)}};
 }
@@ -102,3 +100,15 @@ macro_rules! var {
         })}
     };
 }
+
+pub(crate) use ast;
+pub(crate) use blk;
+pub(crate) use con;
+pub(crate) use fal;
+pub(crate) use fun;
+pub(crate) use id;
+pub(crate) use int;
+pub(crate) use op;
+pub(crate) use st;
+pub(crate) use tru;
+pub(crate) use var;

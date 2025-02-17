@@ -1,6 +1,4 @@
-use super::Error;
-use crate::{tokenizer::Tokens, trace::traceln};
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, PartialEq)]
 pub enum Op {
@@ -21,12 +19,11 @@ pub enum Op {
     Assign,
 }
 
-impl Op {
-    pub fn parse(tokens: &Tokens, at: &mut usize) -> Result<Self, Error> {
-        let code = tokens.code();
-        let token = tokens.peek(*at);
-        traceln!("Op::parse, token = {token:?}");
-        let op = match token.as_str(code) {
+impl FromStr for Op {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let op = match s {
             "+" => Op::Add,
             "-" => Op::Sub,
             "*" => Op::Mul,
@@ -42,32 +39,10 @@ impl Op {
             "or" => Op::Or,
             "not" => Op::Not,
             "=" => Op::Assign,
-            str => {
-                return Err(Error::ExpectedOneOf {
-                    of: vec![
-                        "+".into(),
-                        "-".into(),
-                        "*".into(),
-                        "/".into(),
-                        "%".into(),
-                        "==".into(),
-                        "!=".into(),
-                        "<=".into(),
-                        "<".into(),
-                        ">=".into(),
-                        ">".into(),
-                        "and".into(),
-                        "or".into(),
-                        "not".into(),
-                        "=".into(),
-                    ],
-                    token: str.into(),
-                })
+            _ => {
+                return Err(());
             }
         };
-        traceln!("consuming...");
-
-        tokens.consume(at);
         Ok(op)
     }
 }
