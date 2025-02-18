@@ -36,6 +36,13 @@ impl PartialEq for Expression<'_> {
                 a.else_expr == b.else_expr
             }
             (E::Conditional(..), _) => false,
+            (E::While(a), E::While(b)) => {
+                if a.condition != b.condition {
+                    return false;
+                }
+                a.do_expr == b.do_expr
+            }
+            (E::While(..), _) => false,
             (E::FnCall(a), E::FnCall(b)) => {
                 if a.function != b.function {
                     return false;
@@ -528,6 +535,14 @@ fn var() {
 }
 
 #[test]
+fn var_error() {
+    let code = "if var x = 1 then x";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens);
+    assert!(matches!(expression, Err(..)))
+}
+
+#[test]
 fn semicolons_omitted_in_nested_block() {
     let code = "if ok then {{fn1()} {fn2()} {exit(0)};} else {exit(1)}";
     let tokens = tokenizer::tokenize(code).unwrap();
@@ -739,6 +754,34 @@ fn root_level_block2() {
             };
             id!("b"),
             fun!("c", id!("x"))
+        }
+    );
+}
+
+#[test]
+fn while_loop() {
+    let code = "var x = 0; while true do {x = x + 1; print_int(x)}";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        blk! {
+            var!("x" = int!(0)),
+            whi! {
+                tru!(),
+                blk!{
+                    op! {
+                        id!("x"),
+                        Op::Assign,
+                        op!{
+                            id!("x"),
+                            Op::Add,
+                            int!(1)
+                        }
+                    },
+                    fun!("print_int", id!("x"))
+                }
+            }
         }
     );
 }

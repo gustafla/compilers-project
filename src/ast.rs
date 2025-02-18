@@ -20,6 +20,7 @@ pub enum Expression<'a> {
     Var(Var<'a>),
     BinaryOp(BinaryOp<'a>),
     UnaryOp(UnaryOp<'a>),
+    While(While<'a>),
 }
 
 pub type Int = i64;
@@ -72,4 +73,10 @@ pub struct BinaryOp<'a> {
 pub struct UnaryOp<'a> {
     pub op: Op,
     pub right: Ast<'a>,
+}
+
+#[derive(Debug)]
+pub struct While<'a> {
+    pub condition: Ast<'a>,
+    pub do_expr: Ast<'a>,
 }

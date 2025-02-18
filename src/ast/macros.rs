@@ -53,6 +53,15 @@ macro_rules! con {
     };
 }
 
+macro_rules! whi {
+    {$we: expr, $de: expr $(,)?} => {
+        ast! {Expression::While(While{
+            condition: $we,
+            do_expr: $de,
+        })}
+    };
+}
+
 macro_rules! tru {
     () => {
         ast! {Expression::Literal(Literal::Bool(true))}
@@ -112,3 +121,4 @@ pub(crate) use op;
 pub(crate) use st;
 pub(crate) use tru;
 pub(crate) use var;
+pub(crate) use whi;

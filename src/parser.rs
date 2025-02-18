@@ -3,7 +3,7 @@ mod tests;
 use crate::{
     ast::{
         Ast, BinaryOp, Block, Conditional, Expression, FnCall, Identifier, Int, Literal, Op,
-        UnaryOp, Var,
+        UnaryOp, Var, While,
     },
     config,
     tokenizer::{Kind, Token, Tokens},
@@ -173,6 +173,42 @@ fn parse_conditional<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<As
     }))
 }
 
+fn parse_while<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
+    let (token, fragment) = tokens.peek(at);
+    traceln!("parse_while, token = {:?}", fragment);
+
+    // While
+    if token.kind() != Kind::Identifier || fragment != "while" {
+        return None;
+    }
+    let start = token.location().start();
+    tokens.consume(at);
+
+    // <condition>
+    let condition = match parse_expression(tokens, at) {
+        Ok(ast) => ast,
+        Err(e) => return Some(Err(e)),
+    };
+
+    // Do
+    let (token, fragment) = tokens.consume(at);
+    if token.kind() != Kind::Identifier || fragment != "do" {
+        return Some(Err(Error::ExpectedKeyword("do".into(), token.kind())));
+    }
+
+    // <do>
+    let do_expr = match parse_expression(tokens, at) {
+        Ok(ast) => ast,
+        Err(e) => return Some(Err(e)),
+    };
+
+    let end = tokens.peek_behind(at).0.location().end();
+    Some(Ok(Ast {
+        location: (start..end).into(),
+        tree: Box::new(Expression::While(While { condition, do_expr })),
+    }))
+}
+
 fn parse_fn_call<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
     let ((t0, s0), (_, s1)) = (tokens.peek(at), tokens.peek_ahead(at));
     traceln!("parse_fn_call, token = {s0:?}");
@@ -322,7 +358,13 @@ fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Ast<'a>, Error
     if fragment == "(" {
         return parse_parenthesized(tokens, at);
     } else {
-        for parse_fn in [parse_block, parse_literal, parse_fn_call, parse_conditional] {
+        for parse_fn in [
+            parse_block,
+            parse_literal,
+            parse_fn_call,
+            parse_conditional,
+            parse_while,
+        ] {
             if let Some(res) = parse_fn(tokens, at) {
                 return res;
             }
