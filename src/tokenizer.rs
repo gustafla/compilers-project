@@ -62,24 +62,7 @@ impl Token {
 #[derive(Debug)]
 pub struct Tokens<'a> {
     tokens: Vec<Token>,
-    code: &'a str,
-}
-
-impl Tokens<'_> {
-    pub fn code(&self) -> &str {
-        self.code
-    }
-
-    pub fn peek(&self, at: usize) -> Token {
-        match self.get(at).cloned() {
-            Some(token) => token,
-            None => Token::end(
-                self.last()
-                    .map(|last| Location::from(last.location().end()..last.location().end()))
-                    .unwrap_or_default(),
-            ),
-        }
-    }
+    pub code: &'a str,
 }
 
 impl Index<usize> for Tokens<'_> {

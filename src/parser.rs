@@ -8,6 +8,7 @@ use crate::{
     config,
     tokenizer::{Kind, Token, Tokens},
     trace::{end_trace, start_trace, traceln},
+    Location,
 };
 use std::{num::ParseIntError, str::ParseBoolError};
 use thiserror::Error;
@@ -43,11 +44,9 @@ pub enum Error {
 }
 
 fn parse_op(tokens: &Tokens, at: &mut usize) -> Result<Op, Error> {
-    let code = tokens.code();
-    let token = tokens.peek(*at);
-    let s = token.as_str(code);
-    traceln!("parse_op, token = {s:?}");
-    let op = match s.parse::<Op>() {
+    let (_, fragment) = tokens.peek(at);
+    traceln!("parse_op, token = {fragment:?}");
+    let op = match fragment.parse::<Op>() {
         Ok(op) => op,
         Err(..) => {
             return Err(Error::ExpectedOneOf {
@@ -68,7 +67,7 @@ fn parse_op(tokens: &Tokens, at: &mut usize) -> Result<Op, Error> {
                     "not".into(),
                     "=".into(),
                 ],
-                token: s.into(),
+                token: fragment.into(),
             })
         }
     };
@@ -79,24 +78,23 @@ fn parse_op(tokens: &Tokens, at: &mut usize) -> Result<Op, Error> {
 }
 
 fn parse_literal<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
-    let code = tokens.code();
-    let token = tokens.peek(*at);
-    traceln!("parse_literal, token = {:?}", token.as_str(code));
+    let (token, fragment) = tokens.peek(at);
+    traceln!("parse_literal, token = {:?}", fragment);
 
     let result = match token.kind() {
-        Kind::Identifier => match token.as_str(code).parse::<bool>() {
+        Kind::Identifier => match fragment.parse::<bool>() {
             Ok(boolean) => Ok(Literal::Bool(boolean)),
             Err(..) => return None, // No error, there are other identifiers than true and false
         },
-        Kind::Integer => match token.as_str(code).parse::<Int>() {
+        Kind::Integer => match fragment.parse::<Int>() {
             Ok(i) => Ok(Literal::Int(i)),
             Err(source) => Err(Error::Int {
-                token: token.as_str(code).into(),
+                token: fragment.into(),
                 source,
             }),
         },
         Kind::StrLiteral => {
-            let unquoted = &token.as_str(code)[1..token.len() - 1];
+            let unquoted = &fragment[1..token.len() - 1];
             // TODO: Process escape syntax like \"\" and \\
             Ok(Literal::Str(unquoted))
         }
@@ -110,30 +108,26 @@ fn parse_literal<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a
 }
 
 fn parse_identifier<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Ast<'a>> {
-    let code = tokens.code();
-    let token = tokens.peek(*at);
-    traceln!("parse_identifier, token = {:?}", token.as_str(code));
+    let (token, fragment) = tokens.peek(at);
+    traceln!("parse_identifier, token = {:?}", fragment);
 
     if token.kind() != Kind::Identifier {
         return None;
     }
 
-    let token = tokens.consume(at);
+    tokens.consume(at);
     Some(Ast {
         location: token.location().clone(),
-        tree: Box::new(Expression::Identifier(Identifier {
-            name: token.as_str(code),
-        })),
+        tree: Box::new(Expression::Identifier(Identifier { name: fragment })),
     })
 }
 
 fn parse_conditional<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
-    let code = tokens.code();
-    let token = tokens.peek(*at);
-    traceln!("parse_conditional, token = {:?}", token.as_str(code));
+    let (token, fragment) = tokens.peek(at);
+    traceln!("parse_conditional, token = {:?}", fragment);
 
     // If
-    if token.kind() != Kind::Identifier || token.as_str(code) != "if" {
+    if token.kind() != Kind::Identifier || fragment != "if" {
         return None;
     }
     let start = token.location().start();
@@ -146,8 +140,8 @@ fn parse_conditional<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<As
     };
 
     // Then
-    let token = tokens.consume(at);
-    if token.kind() != Kind::Identifier || token.as_str(code) != "then" {
+    let (token, fragment) = tokens.consume(at);
+    if token.kind() != Kind::Identifier || fragment != "then" {
         return Some(Err(Error::ExpectedKeyword("then".into(), token.kind())));
     }
 
@@ -158,8 +152,8 @@ fn parse_conditional<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<As
     };
 
     // Else
-    let token = tokens.peek(*at);
-    let else_expr = if token.kind() == Kind::Identifier && token.as_str(code) == "else" {
+    let (token, fragment) = tokens.peek(at);
+    let else_expr = if token.kind() == Kind::Identifier && fragment == "else" {
         // <else>
         tokens.consume(at);
         match parse_expression(tokens, at) {
@@ -170,7 +164,7 @@ fn parse_conditional<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<As
         None
     };
 
-    let end = tokens.peek(*at - 1).location().end();
+    let end = tokens.peek_behind(at).0.location().end();
     Some(Ok(Ast {
         location: (start..end).into(),
         tree: Box::new(Expression::Conditional(Conditional {
@@ -182,12 +176,11 @@ fn parse_conditional<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<As
 }
 
 fn parse_fn_call<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
-    let code = tokens.code();
-    let (t0, t1) = (tokens.peek(*at), tokens.peek(*at + 1));
-    traceln!("parse_fn_call, token = {:?}", t0.as_str(code));
+    let ((t0, s0), (_, s1)) = (tokens.peek(at), tokens.peek_ahead(at));
+    traceln!("parse_fn_call, token = {s0:?}");
 
     // Check for identifier followed by an opening paren
-    let (Kind::Identifier, "(") = (t0.kind(), t1.as_str(code)) else {
+    let (Kind::Identifier, "(") = (t0.kind(), s1) else {
         return None;
     };
     let start = t0.location().start();
@@ -199,7 +192,7 @@ fn parse_fn_call<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a
     // Parse arguments
     let mut arguments = Vec::new();
     loop {
-        if tokens.peek(*at).as_str(code) == ")" {
+        if let (_, ")") = tokens.peek(at) {
             tokens.consume(at);
             break;
         }
@@ -208,16 +201,16 @@ fn parse_fn_call<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a
             Err(e) => return Some(Err(e)),
         };
         arguments.push(arg);
-        let token = tokens.consume(at);
-        if token.as_str(code) == ")" {
+        let (token, fragment) = tokens.consume(at);
+        if fragment == ")" {
             break;
         }
-        if token.as_str(code) != "," {
+        if fragment != "," {
             return Some(Err(Error::ExpectedComma(token.kind())));
         }
     }
 
-    let end = tokens.peek(*at - 1).location().end();
+    let end = tokens.peek_behind(at).0.location().end();
     Some(Ok(Ast {
         location: (start..end).into(),
         tree: Box::new(Expression::FnCall(FnCall {
@@ -228,10 +221,9 @@ fn parse_fn_call<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a
 }
 
 fn parse_block<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
-    let code = tokens.code();
-    let token = tokens.peek(*at);
+    let (token, fragment) = tokens.peek(at);
     let start = token.location().start();
-    traceln!("parse_block, token = {:?}", token.as_str(code));
+    traceln!("parse_block, token = {:?}", fragment);
 
     if tokens.consume_one_of(at, &["{"]).is_err() {
         return None;
@@ -257,7 +249,7 @@ fn parse_block<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>,
                 break;
             }
 
-            if tokens.peek(*at - 1).as_str(code) != "}" {
+            if tokens.peek_behind(at).1 != "}" {
                 return Some(Err(e));
             }
         };
@@ -265,7 +257,7 @@ fn parse_block<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>,
         expressions.push(ast);
     }
 
-    let end = tokens.peek(*at - 1).location().end();
+    let end = tokens.peek_behind(at).0.location().end();
     Some(Ok(Ast {
         location: (start..end).into(),
         tree: Box::new(Expression::Block(Block {
@@ -276,12 +268,11 @@ fn parse_block<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>,
 }
 
 fn parse_var<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
-    let code = tokens.code();
-    let token = tokens.peek(*at);
-    traceln!("parse_var, token = {:?}", token.as_str(code));
+    let (token, fragment) = tokens.peek(at);
+    traceln!("parse_var, token = {:?}", fragment);
 
     // var
-    if token.kind() != Kind::Identifier || token.as_str(code) != "var" {
+    if token.kind() != Kind::Identifier || fragment != "var" {
         return None;
     }
     let start = token.location().start();
@@ -293,7 +284,7 @@ fn parse_var<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, E
 
     // <id>
     let Some(id) = parse_identifier(tokens, at) else {
-        return Some(Err(Error::ExpectedIdentifier(tokens.peek(*at).kind())));
+        return Some(Err(Error::ExpectedIdentifier(tokens.peek(at).0.kind())));
     };
 
     // Op::Assign
@@ -314,7 +305,7 @@ fn parse_var<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, E
         Err(e) => return Some(Err(e)),
     };
 
-    let end = tokens.peek(*at - 1).location().end();
+    let end = tokens.peek_behind(at).0.location().end();
     Some(Ok(Ast {
         location: (start..end).into(),
         tree: Box::new(Expression::Var(Var { id, init })),
@@ -322,12 +313,10 @@ fn parse_var<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, E
 }
 
 fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Ast<'a>, Error> {
-    let code = tokens.code();
-    let token = tokens.peek(*at);
-    let tok_str = token.as_str(code);
-    traceln!("parse_factor, token = {:?}", tok_str);
+    let (_, fragment) = tokens.peek(at);
+    traceln!("parse_factor, token = {:?}", fragment);
 
-    if tok_str == "(" {
+    if fragment == "(" {
         return parse_parenthesized(tokens, at);
     } else {
         for parse_fn in [parse_block, parse_literal, parse_fn_call, parse_conditional] {
@@ -340,13 +329,12 @@ fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Ast<'a>, Error
         }
     };
 
-    Err(Error::ExpectedTerm(tokens.peek(*at).kind()))
+    Err(Error::ExpectedTerm(tokens.peek(at).0.kind()))
 }
 
 fn parse_parenthesized<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Ast<'a>, Error> {
-    let code = tokens.code();
-    let token = tokens.peek(*at);
-    traceln!("parse_parenthesized, token = {:?}", token.as_str(code));
+    let (_, fragment) = tokens.peek(at);
+    traceln!("parse_parenthesized, token = {:?}", fragment);
 
     tokens.consume_one_of(at, &["("])?;
     let res = parse_expression(tokens, at);
@@ -360,18 +348,15 @@ fn parse_binary_expr_left<'a>(
     ops: &[&str],
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Ast<'a>, Error>,
 ) -> Result<Ast<'a>, Error> {
-    let code = tokens.code();
-    traceln!(
-        "parse_binary_expr_left for {ops:?}, token = {:?} at {at}",
-        tokens.peek(*at).as_str(code)
-    );
+    let (_, fragment) = tokens.peek(at);
+    traceln!("parse_binary_expr_left for {ops:?}, token = {fragment:?} at {at}");
 
     // Accumulate tree into left
     let mut left = parse_term_fn(tokens, at)?;
     let start = left.location.start();
 
     let result = loop {
-        if !ops.contains(&tokens.peek(*at).as_str(code)) {
+        if !ops.contains(&tokens.peek(at).1) {
             break Ok(left);
         }
 
@@ -399,16 +384,13 @@ fn parse_assignment_expr_right<'a>(
     at: &mut usize,
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Ast<'a>, Error>,
 ) -> Result<Ast<'a>, Error> {
-    let code = tokens.code();
-    traceln!(
-        "parse_assignment_expr_right (=), token = {:?} at {at}",
-        tokens.peek(*at).as_str(code)
-    );
+    let (_, fragment) = tokens.peek(at);
+    traceln!("parse_assignment_expr_right (=), token = {fragment:?} at {at}",);
 
     let mut terms = Vec::new();
     terms.push(parse_term_fn(tokens, at)?);
 
-    while tokens.peek(*at).as_str(code) == "=" {
+    while tokens.peek(at).1 == "=" {
         tokens.consume(at);
         terms.push(parse_term_fn(tokens, at)?);
     }
@@ -435,15 +417,12 @@ fn parse_unary_expr<'a>(
     ops: &[&str],
     parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Ast<'a>, Error>,
 ) -> Result<Ast<'a>, Error> {
-    let code = tokens.code();
-    traceln!(
-        "parse_unary_expr for {ops:?}, token = {:?} at {at}",
-        tokens.peek(*at).as_str(code)
-    );
+    let (_, fragment) = tokens.peek(at);
+    traceln!("parse_unary_expr for {ops:?}, token = {fragment:?} at {at}");
 
     let mut op = Vec::new();
-    while ops.contains(&tokens.peek(*at).as_str(code)) {
-        op.push((tokens.peek(*at).location().start(), parse_op(tokens, at)?));
+    while ops.contains(&tokens.peek(at).1) {
+        op.push((tokens.peek(at).0.location().start(), parse_op(tokens, at)?));
     }
 
     let mut ast = parse_term_fn(tokens, at)?;
@@ -478,21 +457,41 @@ fn parse_expression<'a>(tokens: &'a Tokens<'_>, at: &mut usize) -> Result<Ast<'a
     })
 }
 
-impl Tokens<'_> {
-    fn consume(&self, at: &mut usize) -> Token {
-        let token = self.peek(*at);
-        traceln!(
-            "Tokens::consume, at = {}, token = {:?}",
-            *at,
-            token.as_str(self.code())
-        );
-        *at += 1;
-        token
+impl<'a> Tokens<'a> {
+    fn peek_behind(&self, at: &usize) -> (Token, &'a str) {
+        self.peek(&(*at - 1))
     }
 
-    fn consume_one_of(&self, at: &mut usize, expected: &[&str]) -> Result<Token, Error> {
-        let token = self.peek(*at);
-        let fragment = token.as_str(self.code());
+    fn peek_ahead(&self, at: &usize) -> (Token, &'a str) {
+        self.peek(&(*at + 1))
+    }
+
+    fn peek(&self, at: &usize) -> (Token, &'a str) {
+        match self.get(*at).cloned() {
+            Some(token) => {
+                let fragment = token.as_str(self.code);
+                (token, fragment)
+            }
+            None => (
+                Token::end(
+                    self.last()
+                        .map(|last| Location::from(last.location().end()..last.location().end()))
+                        .unwrap_or_default(),
+                ),
+                "",
+            ),
+        }
+    }
+
+    fn consume(&self, at: &mut usize) -> (Token, &'a str) {
+        let (token, fragment) = self.peek(at);
+        traceln!("Tokens::consume, at = {}, token = {:?}", *at, fragment);
+        *at += 1;
+        (token, fragment)
+    }
+
+    fn consume_one_of(&self, at: &mut usize, expected: &[&str]) -> Result<(Token, &'a str), Error> {
+        let (token, fragment) = self.peek(at);
         if !expected.contains(&fragment) {
             return Err(Error::ExpectedOneOf {
                 of: expected.iter().map(|&s| String::from(s)).collect(),
@@ -500,7 +499,7 @@ impl Tokens<'_> {
             });
         }
         *at += 1;
-        Ok(token)
+        Ok((token, fragment))
     }
 }
 
@@ -514,7 +513,7 @@ pub fn parse<'a>(tokens: &'a Tokens) -> Result<Ast<'a>, Error> {
         dbg!(&root);
     }
 
-    let kind = tokens.peek(at).kind();
+    let kind = tokens.peek(&at).0.kind();
     if kind != Kind::End {
         return Err(Error::ExpectedEnd(kind));
     }
