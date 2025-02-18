@@ -15,7 +15,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Expected one of {of:?}, but encountered {token:?}")]
+    #[error("Expected {of:?}, but encountered {token:?}")]
     ExpectedOneOf { of: Vec<String>, token: String },
     #[error("Expected a literal, but encountered {0:?}")]
     ExpectedLiteral(Kind),
@@ -29,8 +29,6 @@ pub enum Error {
     ExpectedComma(Kind),
     #[error("Expected keyword `{0}`, but encountered {1:?}")]
     ExpectedKeyword(String, Kind),
-    #[error("Unexpected {0:?} (expected EOF)")]
-    ExpectedEnd(Kind),
     #[error("Cannot parse {token:?} as a boolean")]
     Bool {
         token: String,
@@ -221,36 +219,41 @@ fn parse_fn_call<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a
 }
 
 fn parse_block<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
-    let (token, fragment) = tokens.peek(at);
-    let start = token.location().start();
-    traceln!("parse_block, token = {:?}", fragment);
-
-    if tokens.consume_one_of(at, &["{"]).is_err() {
+    if tokens.consume_expect(at, (Kind::Punctuation, "{")).is_err() {
         return None;
     };
+
+    Some(parse_block_contents(tokens, at, (Kind::Punctuation, "}")))
+}
+
+fn parse_block_contents<'a>(
+    tokens: &'a Tokens,
+    at: &mut usize,
+    end: (Kind, &str),
+) -> Result<Ast<'a>, Error> {
+    let (token, fragment) = tokens.peek(at);
+    let start = token.location().start();
+    traceln!("parse_block_contents, token = {:?}", fragment);
 
     let mut expressions = Vec::new();
     let mut result = None;
 
-    while tokens.consume_one_of(at, &["}"]).is_err() {
+    while tokens.consume_expect(at, end).is_err() {
         // Only blocks can contain variable declarations, try them first
         let ast = match parse_var(tokens, at) {
             Some(Ok(ast)) => ast,
-            Some(Err(e)) => return Some(Err(e)),
-            None => match parse_expression(tokens, at) {
-                Ok(ast) => ast,
-                Err(e) => return Some(Err(e)),
-            },
+            Some(Err(e)) => return Err(e),
+            None => parse_expression(tokens, at)?,
         };
 
-        if let Err(e) = tokens.consume_one_of(at, &[";"]) {
-            if tokens.consume_one_of(at, &["}"]).is_ok() {
+        if let Err(e) = tokens.consume_expect(at, (Kind::Punctuation, ";")) {
+            if tokens.consume_expect(at, end).is_ok() {
                 result = Some(ast);
                 break;
             }
 
             if tokens.peek_behind(at).1 != "}" {
-                return Some(Err(e));
+                return Err(e);
             }
         };
 
@@ -258,13 +261,13 @@ fn parse_block<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>,
     }
 
     let end = tokens.peek_behind(at).0.location().end();
-    Some(Ok(Ast {
+    Ok(Ast {
         location: (start..end).into(),
         tree: Box::new(Expression::Block(Block {
             expressions,
             result,
         })),
-    }))
+    })
 }
 
 fn parse_var<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
@@ -336,9 +339,9 @@ fn parse_parenthesized<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Ast<'a>
     let (_, fragment) = tokens.peek(at);
     traceln!("parse_parenthesized, token = {:?}", fragment);
 
-    tokens.consume_one_of(at, &["("])?;
+    tokens.consume_expect(at, (Kind::Punctuation, "("))?;
     let res = parse_expression(tokens, at);
-    tokens.consume_one_of(at, &[")"])?;
+    tokens.consume_expect(at, (Kind::Punctuation, ")"))?;
     res
 }
 
@@ -478,7 +481,7 @@ impl<'a> Tokens<'a> {
                         .map(|last| Location::from(last.location().end()..last.location().end()))
                         .unwrap_or_default(),
                 ),
-                "",
+                "EOF",
             ),
         }
     }
@@ -490,11 +493,15 @@ impl<'a> Tokens<'a> {
         (token, fragment)
     }
 
-    fn consume_one_of(&self, at: &mut usize, expected: &[&str]) -> Result<(Token, &'a str), Error> {
+    fn consume_expect(
+        &self,
+        at: &mut usize,
+        expected: (Kind, &str),
+    ) -> Result<(Token, &'a str), Error> {
         let (token, fragment) = self.peek(at);
-        if !expected.contains(&fragment) {
+        if (token.kind(), fragment) != expected {
             return Err(Error::ExpectedOneOf {
-                of: expected.iter().map(|&s| String::from(s)).collect(),
+                of: vec![String::from(expected.1)],
                 token: String::from(fragment),
             });
         }
@@ -506,16 +513,11 @@ impl<'a> Tokens<'a> {
 pub fn parse<'a>(tokens: &'a Tokens) -> Result<Ast<'a>, Error> {
     start_trace!("Parser");
     let mut at = 0;
-    let root = parse_expression(tokens, &mut at)?;
+    let root = parse_block_contents(tokens, &mut at, (Kind::End, "EOF"))?;
     end_trace!();
 
     if config::verbose() {
         dbg!(&root);
-    }
-
-    let kind = tokens.peek(&at).0.kind();
-    if kind != Kind::End {
-        return Err(Error::ExpectedEnd(kind));
     }
 
     Ok(root)
