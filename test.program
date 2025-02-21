@@ -1,0 +1,5 @@
+var x = read_int();
+while x < 100 do {
+	x = x + 1;
+	print_int(x);
+}

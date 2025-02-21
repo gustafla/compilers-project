@@ -1,3 +1,5 @@
+#![allow(unused_macros, unused_imports, reason = "Macros defined for testing")]
+
 macro_rules! ast {
     {$e: expr $(,)?} => {Ast {location: Default::default(), tree: Box::new($e)}};
 }

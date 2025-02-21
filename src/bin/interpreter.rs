@@ -5,16 +5,16 @@ use compilers_project::{
     parse, Ast, Config,
 };
 use std::{
-    cmp::Ordering,
     collections::{
         hash_map::{Entry, OccupiedEntry},
         HashMap,
     },
     error::Error,
+    fmt::Display,
     fs::{self},
     io::{self},
-    ops::{Add, Div, Mul, Rem, Sub},
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 macro_rules! err {
@@ -33,11 +33,25 @@ struct Cli {
     files: Vec<PathBuf>,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+type Fun = Rc<dyn Fn(&[Value]) -> Value>;
+
+#[derive(Clone)]
 enum Value {
     Int(i64),
     Bool(bool),
     Unit,
+    Fun(Fun),
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Int(a) => write!(f, "{}", a),
+            Value::Bool(a) => write!(f, "{}", a),
+            Value::Unit => write!(f, "<unit>"),
+            Value::Fun(_) => write!(f, "<function>"),
+        }
+    }
 }
 
 impl From<&Literal<'_>> for Value {
@@ -45,78 +59,7 @@ impl From<&Literal<'_>> for Value {
         match value {
             Literal::Int(i) => Value::Int(*i),
             Literal::Bool(b) => Value::Bool(*b),
-            Literal::Str(_) => unimplemented!(),
-        }
-    }
-}
-
-impl Add for Value {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
-            _ => panic!("+ requires integer operands"),
-        }
-    }
-}
-
-impl Sub for Value {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Value::Int(a), Value::Int(b)) => Value::Int(a - b),
-            _ => panic!("- requires integer operands"),
-        }
-    }
-}
-
-impl Mul for Value {
-    type Output = Self;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
-            _ => panic!("* requires integer operands"),
-        }
-    }
-}
-
-impl Div for Value {
-    type Output = Self;
-
-    fn div(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
-            _ => panic!("/ requires integer operands"),
-        }
-    }
-}
-
-impl Rem for Value {
-    type Output = Self;
-
-    fn rem(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Value::Int(a), Value::Int(b)) => Value::Int(a % b),
-            _ => panic!("% requires integer operands"),
-        }
-    }
-}
-
-impl PartialOrd for Value {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self, other) {
-            (Value::Int(a), Value::Int(b)) => a.partial_cmp(b),
-            (Value::Bool(a), Value::Bool(b)) => a.partial_cmp(b),
-            (Value::Unit, Value::Unit) => Some(Ordering::Equal),
-            (Value::Int(_), Value::Bool(_)) => panic!("Can't compare int with bool"),
-            (Value::Int(_), Value::Unit) => panic!("Can't compare int with unit"),
-            (Value::Bool(_), Value::Int(_)) => panic!("Can't compare bool with int"),
-            (Value::Bool(_), Value::Unit) => panic!("Can't compare bool with unit"),
-            (Value::Unit, Value::Int(_)) => panic!("Can't compare unit with int"),
-            (Value::Unit, Value::Bool(_)) => panic!("Can't compare unit with bool"),
+            Literal::Str(_) => unimplemented!("String literals are not supported"),
         }
     }
 }
@@ -138,7 +81,7 @@ fn resolve_sym<'a, 'b>(
 fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
     match ast.tree.as_ref() {
         Expression::Literal(literal) => literal.into(),
-        Expression::Identifier(identifier) => resolve_sym(symtab, identifier.name).get().to_owned(),
+        Expression::Identifier(identifier) => resolve_sym(symtab, identifier.name).get().clone(),
         Expression::Conditional(conditional) => {
             let Value::Bool(condition) = interpret(&conditional.condition, symtab) else {
                 panic!("if requires a boolean expression");
@@ -151,7 +94,20 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
                 Value::Unit
             }
         }
-        Expression::FnCall(fn_call) => todo!(),
+        Expression::FnCall(fn_call) => {
+            let key = match fn_call.function.tree.as_ref() {
+                Expression::Identifier(identifier) => identifier.name,
+                _ => unreachable!(),
+            };
+            let mut args: Vec<Value> = Vec::new();
+            for arg in &fn_call.arguments {
+                args.push(interpret(arg, symtab));
+            }
+            match resolve_sym(symtab, key).get() {
+                Value::Fun(f) => f(&args),
+                _ => panic!(""),
+            }
+        }
         Expression::Block(block) => {
             symtab.push(HashMap::new());
             for expr in &block.expressions {
@@ -187,28 +143,29 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
 
             let a = interpret(&binary_op.left, symtab);
             let b = interpret(&binary_op.right, symtab);
-            match binary_op.op {
-                Op::Add => a + b,
-                Op::Sub => a - b,
-                Op::Mul => a * b,
-                Op::Div => a / b,
-                Op::Rem => a % b,
-                Op::Eq => Value::Bool(a == b),
-                Op::Ne => Value::Bool(a != b),
-                Op::Leq => Value::Bool(a <= b),
-                Op::Lt => Value::Bool(a < b),
-                Op::Geq => Value::Bool(a >= b),
-                Op::Gt => Value::Bool(a > b),
-                Op::And => match (a, b) {
-                    (Value::Bool(a), Value::Bool(b)) => Value::Bool(a && b),
-                    _ => panic!("&& requires boolean operands"),
-                },
-                Op::Or => match (a, b) {
-                    (Value::Bool(a), Value::Bool(b)) => Value::Bool(a || b),
-                    _ => panic!("|| requires boolean operands"),
-                },
-                Op::Assign => unreachable!(),
-                Op::Not => unreachable!(),
+            match (a, &binary_op.op, b) {
+                (Value::Int(a), Op::Add, Value::Int(b)) => Value::Int(a + b),
+                (Value::Int(a), Op::Sub, Value::Int(b)) => Value::Int(a - b),
+                (Value::Int(a), Op::Mul, Value::Int(b)) => Value::Int(a * b),
+                (Value::Int(a), Op::Div, Value::Int(b)) => Value::Int(a / b),
+                (Value::Int(a), Op::Rem, Value::Int(b)) => Value::Int(a % b),
+                (Value::Int(a), Op::Eq, Value::Int(b)) => Value::Bool(a == b),
+                (Value::Bool(a), Op::Eq, Value::Bool(b)) => Value::Bool(a == b),
+                (Value::Int(a), Op::Ne, Value::Int(b)) => Value::Bool(a != b),
+                (Value::Bool(a), Op::Ne, Value::Bool(b)) => Value::Bool(a != b),
+                (Value::Int(a), Op::Leq, Value::Int(b)) => Value::Bool(a <= b),
+                (Value::Bool(a), Op::Leq, Value::Bool(b)) => Value::Bool(a <= b),
+                (Value::Int(a), Op::Lt, Value::Int(b)) => Value::Bool(a < b),
+                (Value::Bool(a), Op::Lt, Value::Bool(b)) => Value::Bool(!a & b),
+                (Value::Int(a), Op::Geq, Value::Int(b)) => Value::Bool(a >= b),
+                (Value::Bool(a), Op::Geq, Value::Bool(b)) => Value::Bool(a >= b),
+                (Value::Int(a), Op::Gt, Value::Int(b)) => Value::Bool(a > b),
+                (Value::Bool(a), Op::Gt, Value::Bool(b)) => Value::Bool(a & !b),
+                (Value::Bool(a), Op::And, Value::Bool(b)) => Value::Bool(a && b),
+                (Value::Bool(a), Op::Or, Value::Bool(b)) => Value::Bool(a || b),
+                (_, Op::Assign, _) => unreachable!(),
+                (_, Op::Not, _) => unreachable!(),
+                (a, op, b) => panic!("Unsupported operation: {a} {op} {b}"),
             }
         }
         Expression::UnaryOp(unary_op) => {
@@ -259,7 +216,45 @@ fn main() {
         Err(ref e) => err!(e),
     };
 
-    let mut symtab = vec![HashMap::new()];
+    let mut symtab = vec![HashMap::from([
+        (
+            "print_int",
+            Value::Fun(Rc::new(|args: &[Value]| {
+                match args {
+                    [Value::Int(a)] => {
+                        println!("{}", a)
+                    }
+                    _ => panic!("Incorrect arguments to print_int"),
+                }
+                Value::Unit
+            })),
+        ),
+        (
+            "print_bool",
+            Value::Fun(Rc::new(|args: &[Value]| {
+                match args {
+                    [Value::Bool(a)] => {
+                        println!("{}", a)
+                    }
+                    _ => panic!("Incorrect arguments to print_bool"),
+                }
+                Value::Unit
+            })),
+        ),
+        (
+            "read_int",
+            Value::Fun(Rc::new(|args: &[Value]| {
+                match args {
+                    [] => {}
+                    _ => panic!("Incorrect arguments to read_int"),
+                }
+                let mut buf = String::new();
+                io::stdin().read_line(&mut buf).unwrap();
+                Value::Int(buf.trim().parse().unwrap())
+            })),
+        ),
+    ])];
+
     let code = match interpret(&ast, &mut symtab) {
         Value::Int(i) => i.clamp(0, 255) as i32,
         Value::Bool(b) => {
@@ -270,6 +265,7 @@ fn main() {
             }
         }
         Value::Unit => 0,
+        Value::Fun(_) => unreachable!(),
     };
 
     std::process::exit(code);
