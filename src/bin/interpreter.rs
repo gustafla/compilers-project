@@ -5,7 +5,12 @@ use compilers_project::{
     parse, Ast, Config,
 };
 use std::{
+    borrow::Cow,
     cmp::Ordering,
+    collections::{
+        hash_map::{Entry, OccupiedEntry},
+        HashMap,
+    },
     error::Error,
     fs::{self},
     io::{self},
@@ -29,11 +34,11 @@ struct Cli {
     files: Vec<PathBuf>,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum Value {
     Int(i64),
     Bool(bool),
-    None,
+    Unit,
 }
 
 impl From<&Literal<'_>> for Value {
@@ -106,48 +111,83 @@ impl PartialOrd for Value {
         match (self, other) {
             (Value::Int(a), Value::Int(b)) => a.partial_cmp(b),
             (Value::Bool(a), Value::Bool(b)) => a.partial_cmp(b),
-            (Value::None, Value::None) => Some(Ordering::Equal),
+            (Value::Unit, Value::Unit) => Some(Ordering::Equal),
             (Value::Int(_), Value::Bool(_)) => panic!("Can't compare int with bool"),
-            (Value::Int(_), Value::None) => panic!("Can't compare int with none"),
+            (Value::Int(_), Value::Unit) => panic!("Can't compare int with unit"),
             (Value::Bool(_), Value::Int(_)) => panic!("Can't compare bool with int"),
-            (Value::Bool(_), Value::None) => panic!("Can't compare bool with none"),
-            (Value::None, Value::Int(_)) => panic!("Can't compare none with int"),
-            (Value::None, Value::Bool(_)) => panic!("Can't compare none with bool"),
+            (Value::Bool(_), Value::Unit) => panic!("Can't compare bool with unit"),
+            (Value::Unit, Value::Int(_)) => panic!("Can't compare unit with int"),
+            (Value::Unit, Value::Bool(_)) => panic!("Can't compare unit with bool"),
         }
     }
 }
 
-fn interpret(ast: &Ast) -> Value {
+type SymbolTable<'a> = HashMap<Cow<'a, str>, Value>;
+
+fn resolve_sym<'a, 'b>(
+    symtab: &'b mut [SymbolTable<'a>],
+    key: &'a str,
+) -> OccupiedEntry<'b, Cow<'a, str>, Value> {
+    for table in symtab.iter_mut().rev() {
+        if let Entry::Occupied(entry) = table.entry(Cow::Borrowed(key)) {
+            return entry;
+        }
+    }
+    panic!("unresolved identifier: {}", key);
+}
+
+fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
     match ast.tree.as_ref() {
         Expression::Literal(literal) => literal.into(),
-        Expression::Identifier(identifier) => todo!(),
+        Expression::Identifier(identifier) => resolve_sym(symtab, identifier.name).get().to_owned(),
         Expression::Conditional(conditional) => {
-            let Value::Bool(condition) = interpret(&conditional.condition) else {
+            let Value::Bool(condition) = interpret(&conditional.condition, symtab) else {
                 panic!("if requires a boolean expression");
             };
             if condition {
-                interpret(&conditional.then_expr)
+                interpret(&conditional.then_expr, symtab)
             } else if let Some(else_expr) = &conditional.else_expr {
-                interpret(else_expr)
+                interpret(else_expr, symtab)
             } else {
-                Value::None
+                Value::Unit
             }
         }
         Expression::FnCall(fn_call) => todo!(),
         Expression::Block(block) => {
+            symtab.push(HashMap::new());
             for expr in &block.expressions {
-                interpret(expr);
+                interpret(expr, symtab);
             }
-            if let Some(expr) = &block.result {
-                interpret(expr)
+            let result = if let Some(expr) = &block.result {
+                interpret(expr, symtab)
             } else {
-                Value::None
-            }
+                Value::Unit
+            };
+            symtab.pop();
+            result
         }
-        Expression::Var(var) => todo!(),
+        Expression::Var(var) => {
+            let key = match var.id.tree.as_ref() {
+                Expression::Identifier(identifier) => identifier.name,
+                _ => unreachable!(),
+            };
+            let value = interpret(&var.init, symtab);
+            symtab.last_mut().unwrap().insert(Cow::Borrowed(key), value);
+            Value::Unit
+        }
         Expression::BinaryOp(binary_op) => {
-            let a = interpret(&binary_op.left);
-            let b = interpret(&binary_op.right);
+            if binary_op.op == Op::Assign {
+                let key = match binary_op.left.tree.as_ref() {
+                    Expression::Identifier(identifier) => identifier.name,
+                    _ => panic!("= requires identifier on the lhs"),
+                };
+                let value = interpret(&binary_op.right, symtab);
+                resolve_sym(symtab, key).insert(value);
+                return Value::Unit;
+            }
+
+            let a = interpret(&binary_op.left, symtab);
+            let b = interpret(&binary_op.right, symtab);
             match binary_op.op {
                 Op::Add => a + b,
                 Op::Sub => a - b,
@@ -168,12 +208,12 @@ fn interpret(ast: &Ast) -> Value {
                     (Value::Bool(a), Value::Bool(b)) => Value::Bool(a || b),
                     _ => panic!("|| requires boolean operands"),
                 },
+                Op::Assign => unreachable!(),
                 Op::Not => unreachable!(),
-                Op::Assign => todo!(),
             }
         }
         Expression::UnaryOp(unary_op) => {
-            let value = interpret(&unary_op.right);
+            let value = interpret(&unary_op.right, symtab);
             match (&unary_op.op, value) {
                 (Op::Not, Value::Bool(a)) => Value::Bool(!a),
                 (Op::Not, _) => panic!("not requires a boolean operand"),
@@ -183,13 +223,13 @@ fn interpret(ast: &Ast) -> Value {
             }
         }
         Expression::While(node) => {
-            while match interpret(&node.condition) {
+            while match interpret(&node.condition, symtab) {
                 Value::Bool(condition) => condition,
                 _ => panic!("while requires a boolean condition"),
             } {
-                interpret(&node.do_expr);
+                interpret(&node.do_expr, symtab);
             }
-            Value::None
+            Value::Unit
         }
     }
 }
@@ -220,7 +260,8 @@ fn main() {
         Err(ref e) => err!(e),
     };
 
-    let code = match interpret(&ast) {
+    let mut symtab = vec![HashMap::new()];
+    let code = match interpret(&ast, &mut symtab) {
         Value::Int(i) => i.clamp(0, 255) as i32,
         Value::Bool(b) => {
             if b {
@@ -229,7 +270,7 @@ fn main() {
                 1
             }
         }
-        Value::None => 0,
+        Value::Unit => 0,
     };
 
     std::process::exit(code);
