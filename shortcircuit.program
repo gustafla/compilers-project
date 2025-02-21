@@ -1,0 +1,7 @@
+var evaluated_right_hand_side = false;
+true or { evaluated_right_hand_side = true; true };
+print_bool(evaluated_right_hand_side); // Should be false
+
+evaluated_right_hand_side = true;
+false and { evaluated_right_hand_side = false; true };
+print_bool(evaluated_right_hand_side); // Should be true

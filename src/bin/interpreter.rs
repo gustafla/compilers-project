@@ -45,7 +45,7 @@ macro_rules! call {
     ($symtab: expr, $id: literal, $args: expr) => {
         match resolve_sym($symtab, $id).get() {
             Value::Fun(f) => f($args),
-            _ => unreachable!(),
+            _ => unreachable!("Invalid builtin call"),
         }
     };
 }
@@ -123,7 +123,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
         Expression::FnCall(fn_call) => {
             let key = match fn_call.function.tree.as_ref() {
                 Expression::Identifier(identifier) => identifier.name,
-                _ => unreachable!(),
+                _ => unreachable!("Ast function call identifier is not an identifier"),
             };
             let mut args: Vec<Value> = Vec::new();
             for arg in &fn_call.arguments {
@@ -131,7 +131,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
             }
             match resolve_sym(symtab, key).get() {
                 Value::Fun(f) => f(&args),
-                _ => panic!(""),
+                _ => panic!("{} is not a function", key),
             }
         }
         Expression::Block(block) => {
@@ -150,13 +150,14 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
         Expression::Var(var) => {
             let key = match var.id.tree.as_ref() {
                 Expression::Identifier(identifier) => identifier.name,
-                _ => unreachable!(),
+                _ => unreachable!("Ast variable declaration identifier is not an identifier"),
             };
             let value = interpret(&var.init, symtab);
             symtab.last_mut().unwrap().insert(key, value);
             Value::Unit
         }
         Expression::BinaryOp(binary_op) => {
+            // Special case: Assignment
             if binary_op.op == Op::Assign {
                 let key = match binary_op.left.tree.as_ref() {
                     Expression::Identifier(identifier) => identifier.name,
@@ -167,8 +168,31 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
                 return Value::Unit;
             }
 
+            // Interpret lhs
             let a = interpret(&binary_op.left, symtab);
+
+            // Short-circuit and
+            if binary_op.op == Op::And {
+                if let Value::Bool(a) = a {
+                    if !a {
+                        return Value::Bool(false);
+                    }
+                }
+            }
+
+            // Short-circuit or
+            if binary_op.op == Op::Or {
+                if let Value::Bool(a) = a {
+                    if a {
+                        return Value::Bool(true);
+                    }
+                }
+            }
+
+            // Interpret rhs
             let b = interpret(&binary_op.right, symtab);
+
+            // Delegate to builtins
             match binary_op.op {
                 Op::Add => call!(symtab, "binary_add", &[a, b]),
                 Op::Sub => call!(symtab, "binary_sub", &[a, b]),
@@ -183,8 +207,8 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
                 Op::Gt => call!(symtab, "binary_gt", &[a, b]),
                 Op::And => call!(symtab, "binary_and", &[a, b]),
                 Op::Or => call!(symtab, "binary_or", &[a, b]),
-                Op::Not => unreachable!(),
-                Op::Assign => unreachable!(),
+                Op::Not => unreachable!("Ast has Op::Not in a binary operation"),
+                Op::Assign => unreachable!("Op::Assign should have been handled in a special case"),
             }
         }
         Expression::UnaryOp(unary_op) => {
@@ -192,7 +216,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
             match &unary_op.op {
                 Op::Sub => call!(symtab, "unary_sub", &[value]),
                 Op::Not => call!(symtab, "unary_not", &[value]),
-                _ => unreachable!(),
+                op => unreachable!("Ast has {op:?} in an unary operation"),
             }
         }
         Expression::While(node) => {
@@ -299,8 +323,7 @@ fn main() {
                 1
             }
         }
-        Value::Unit => 0,
-        Value::Fun(_) => unreachable!(),
+        _ => 0,
     };
 
     std::process::exit(code);
