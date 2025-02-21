@@ -10,7 +10,6 @@ use std::{
         HashMap,
     },
     error::Error,
-    fmt::Display,
     fs::{self},
     io::{self},
     path::{Path, PathBuf},
@@ -22,6 +21,33 @@ macro_rules! err {
         ::compilers_project::print_error($e);
         ::std::process::exit(1);
     }};
+}
+
+macro_rules! fun {
+    ($id: literal, $valid_args: pat, $body: expr) => {
+        (
+            $id,
+            Value::Fun(Rc::new(|args: &[Value]| {
+                let $valid_args = args else {
+                    panic!(
+                        "Invalid arguments to {}, expected: {}, have: {args:?}",
+                        $id,
+                        stringify!($valid_args)
+                    );
+                };
+                $body
+            })),
+        )
+    };
+}
+
+macro_rules! call {
+    ($symtab: expr, $id: literal, $args: expr) => {
+        match resolve_sym($symtab, $id).get() {
+            Value::Fun(f) => f($args),
+            _ => unreachable!(),
+        }
+    };
 }
 
 #[derive(Parser, Debug)]
@@ -43,7 +69,7 @@ enum Value {
     Fun(Fun),
 }
 
-impl Display for Value {
+impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Int(a) => write!(f, "{}", a),
@@ -143,38 +169,29 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
 
             let a = interpret(&binary_op.left, symtab);
             let b = interpret(&binary_op.right, symtab);
-            match (a, &binary_op.op, b) {
-                (Value::Int(a), Op::Add, Value::Int(b)) => Value::Int(a + b),
-                (Value::Int(a), Op::Sub, Value::Int(b)) => Value::Int(a - b),
-                (Value::Int(a), Op::Mul, Value::Int(b)) => Value::Int(a * b),
-                (Value::Int(a), Op::Div, Value::Int(b)) => Value::Int(a / b),
-                (Value::Int(a), Op::Rem, Value::Int(b)) => Value::Int(a % b),
-                (Value::Int(a), Op::Eq, Value::Int(b)) => Value::Bool(a == b),
-                (Value::Bool(a), Op::Eq, Value::Bool(b)) => Value::Bool(a == b),
-                (Value::Int(a), Op::Ne, Value::Int(b)) => Value::Bool(a != b),
-                (Value::Bool(a), Op::Ne, Value::Bool(b)) => Value::Bool(a != b),
-                (Value::Int(a), Op::Leq, Value::Int(b)) => Value::Bool(a <= b),
-                (Value::Bool(a), Op::Leq, Value::Bool(b)) => Value::Bool(a <= b),
-                (Value::Int(a), Op::Lt, Value::Int(b)) => Value::Bool(a < b),
-                (Value::Bool(a), Op::Lt, Value::Bool(b)) => Value::Bool(!a & b),
-                (Value::Int(a), Op::Geq, Value::Int(b)) => Value::Bool(a >= b),
-                (Value::Bool(a), Op::Geq, Value::Bool(b)) => Value::Bool(a >= b),
-                (Value::Int(a), Op::Gt, Value::Int(b)) => Value::Bool(a > b),
-                (Value::Bool(a), Op::Gt, Value::Bool(b)) => Value::Bool(a & !b),
-                (Value::Bool(a), Op::And, Value::Bool(b)) => Value::Bool(a && b),
-                (Value::Bool(a), Op::Or, Value::Bool(b)) => Value::Bool(a || b),
-                (_, Op::Assign, _) => unreachable!(),
-                (_, Op::Not, _) => unreachable!(),
-                (a, op, b) => panic!("Unsupported operation: {a} {op} {b}"),
+            match binary_op.op {
+                Op::Add => call!(symtab, "binary_add", &[a, b]),
+                Op::Sub => call!(symtab, "binary_sub", &[a, b]),
+                Op::Mul => call!(symtab, "binary_mul", &[a, b]),
+                Op::Div => call!(symtab, "binary_div", &[a, b]),
+                Op::Rem => call!(symtab, "binary_rem", &[a, b]),
+                Op::Eq => call!(symtab, "binary_eq", &[a, b]),
+                Op::Ne => call!(symtab, "binary_ne", &[a, b]),
+                Op::Leq => call!(symtab, "binary_leq", &[a, b]),
+                Op::Lt => call!(symtab, "binary_lt", &[a, b]),
+                Op::Geq => call!(symtab, "binary_geq", &[a, b]),
+                Op::Gt => call!(symtab, "binary_gt", &[a, b]),
+                Op::And => call!(symtab, "binary_and", &[a, b]),
+                Op::Or => call!(symtab, "binary_or", &[a, b]),
+                Op::Not => unreachable!(),
+                Op::Assign => unreachable!(),
             }
         }
         Expression::UnaryOp(unary_op) => {
             let value = interpret(&unary_op.right, symtab);
-            match (&unary_op.op, value) {
-                (Op::Not, Value::Bool(a)) => Value::Bool(!a),
-                (Op::Not, _) => panic!("not requires a boolean operand"),
-                (Op::Sub, Value::Int(a)) => Value::Int(-a),
-                (Op::Sub, _) => panic!("- requires an integer operand"),
+            match &unary_op.op {
+                Op::Sub => call!(symtab, "unary_sub", &[value]),
+                Op::Not => call!(symtab, "unary_not", &[value]),
                 _ => unreachable!(),
             }
         }
@@ -217,42 +234,60 @@ fn main() {
     };
 
     let mut symtab = vec![HashMap::from([
-        (
-            "print_int",
-            Value::Fun(Rc::new(|args: &[Value]| {
-                match args {
-                    [Value::Int(a)] => {
-                        println!("{}", a)
-                    }
-                    _ => panic!("Incorrect arguments to print_int"),
-                }
-                Value::Unit
-            })),
-        ),
-        (
-            "print_bool",
-            Value::Fun(Rc::new(|args: &[Value]| {
-                match args {
-                    [Value::Bool(a)] => {
-                        println!("{}", a)
-                    }
-                    _ => panic!("Incorrect arguments to print_bool"),
-                }
-                Value::Unit
-            })),
-        ),
-        (
-            "read_int",
-            Value::Fun(Rc::new(|args: &[Value]| {
-                match args {
-                    [] => {}
-                    _ => panic!("Incorrect arguments to read_int"),
-                }
-                let mut buf = String::new();
-                io::stdin().read_line(&mut buf).unwrap();
-                Value::Int(buf.trim().parse().unwrap())
-            })),
-        ),
+        fun!("print_int", [Value::Int(a)], {
+            println!("{}", a);
+            Value::Unit
+        }),
+        fun!("print_bool", [Value::Bool(a)], {
+            println!("{}", a);
+            Value::Unit
+        }),
+        fun!("read_int", [], {
+            let mut buf = String::new();
+            io::stdin().read_line(&mut buf).unwrap();
+            Value::Int(buf.trim().parse().unwrap())
+        }),
+        fun!("binary_add", [Value::Int(a), Value::Int(b)], {
+            Value::Int(a + b)
+        }),
+        fun!("binary_sub", [Value::Int(a), Value::Int(b)], {
+            Value::Int(a - b)
+        }),
+        fun!("unary_sub", [Value::Int(a)], Value::Int(-a)),
+        fun!("binary_mul", [Value::Int(a), Value::Int(b)], {
+            Value::Int(a * b)
+        }),
+        fun!("binary_div", [Value::Int(a), Value::Int(b)], {
+            Value::Int(a / b)
+        }),
+        fun!("binary_rem", [Value::Int(a), Value::Int(b)], {
+            Value::Int(a % b)
+        }),
+        fun!("binary_eq", [Value::Int(a), Value::Int(b)], {
+            Value::Bool(a == b)
+        }),
+        fun!("binary_neq", [Value::Int(a), Value::Int(b)], {
+            Value::Bool(a != b)
+        }),
+        fun!("binary_lt", [Value::Int(a), Value::Int(b)], {
+            Value::Bool(a < b)
+        }),
+        fun!("binary_leq", [Value::Int(a), Value::Int(b)], {
+            Value::Bool(a <= b)
+        }),
+        fun!("binary_gt", [Value::Int(a), Value::Int(b)], {
+            Value::Bool(a > b)
+        }),
+        fun!("binary_geq", [Value::Int(a), Value::Int(b)], {
+            Value::Bool(a >= b)
+        }),
+        fun!("binary_and", [Value::Bool(a), Value::Bool(b)], {
+            Value::Bool(*a && *b)
+        }),
+        fun!("binary_or", [Value::Bool(a), Value::Bool(b)], {
+            Value::Bool(*a || *b)
+        }),
+        fun!("unary_not", [Value::Bool(a)], Value::Bool(!a)),
     ])];
 
     let code = match interpret(&ast, &mut symtab) {
