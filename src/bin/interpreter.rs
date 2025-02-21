@@ -5,7 +5,6 @@ use compilers_project::{
     parse, Ast, Config,
 };
 use std::{
-    borrow::Cow,
     cmp::Ordering,
     collections::{
         hash_map::{Entry, OccupiedEntry},
@@ -122,14 +121,14 @@ impl PartialOrd for Value {
     }
 }
 
-type SymbolTable<'a> = HashMap<Cow<'a, str>, Value>;
+type SymbolTable<'a> = HashMap<&'a str, Value>;
 
 fn resolve_sym<'a, 'b>(
     symtab: &'b mut [SymbolTable<'a>],
     key: &'a str,
-) -> OccupiedEntry<'b, Cow<'a, str>, Value> {
+) -> OccupiedEntry<'b, &'a str, Value> {
     for table in symtab.iter_mut().rev() {
-        if let Entry::Occupied(entry) = table.entry(Cow::Borrowed(key)) {
+        if let Entry::Occupied(entry) = table.entry(key) {
             return entry;
         }
     }
@@ -172,7 +171,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
                 _ => unreachable!(),
             };
             let value = interpret(&var.init, symtab);
-            symtab.last_mut().unwrap().insert(Cow::Borrowed(key), value);
+            symtab.last_mut().unwrap().insert(key, value);
             Value::Unit
         }
         Expression::BinaryOp(binary_op) => {
