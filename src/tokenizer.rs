@@ -50,6 +50,10 @@ impl Token {
         self.location.end() - self.location.start()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn kind(&self) -> Kind {
         self.kind
     }

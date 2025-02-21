@@ -41,7 +41,7 @@ pub enum Error {
     },
 }
 
-fn parse_op(tokens: &Tokens, at: &mut usize) -> Result<Op, Error> {
+fn parse_op(tokens: &Tokens<'_>, at: &mut usize) -> Result<Op, Error> {
     let (_, fragment) = tokens.peek(at);
     traceln!("parse_op, token = {fragment:?}");
     let op = match fragment.parse::<Op>() {
@@ -75,7 +75,7 @@ fn parse_op(tokens: &Tokens, at: &mut usize) -> Result<Op, Error> {
     Ok(op)
 }
 
-fn parse_literal<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
+fn parse_literal<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
     let (token, fragment) = tokens.peek(at);
     traceln!("parse_literal, token = {:?}", fragment);
 
@@ -105,7 +105,7 @@ fn parse_literal<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a
     }))
 }
 
-fn parse_identifier<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Ast<'a>> {
+fn parse_identifier<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Ast<'a>> {
     let (token, fragment) = tokens.peek(at);
     traceln!("parse_identifier, token = {:?}", fragment);
 
@@ -120,7 +120,7 @@ fn parse_identifier<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Ast<'a>> {
     })
 }
 
-fn parse_conditional<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
+fn parse_conditional<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
     let (token, fragment) = tokens.peek(at);
     traceln!("parse_conditional, token = {:?}", fragment);
 
@@ -173,7 +173,7 @@ fn parse_conditional<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<As
     }))
 }
 
-fn parse_while<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
+fn parse_while<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
     let (token, fragment) = tokens.peek(at);
     traceln!("parse_while, token = {:?}", fragment);
 
@@ -209,7 +209,7 @@ fn parse_while<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>,
     }))
 }
 
-fn parse_fn_call<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
+fn parse_fn_call<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
     let ((t0, s0), (_, s1)) = (tokens.peek(at), tokens.peek_ahead(at));
     traceln!("parse_fn_call, token = {s0:?}");
 
@@ -254,7 +254,7 @@ fn parse_fn_call<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a
     }))
 }
 
-fn parse_block<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
+fn parse_block<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
     if tokens.consume_expect(at, (Kind::Punctuation, "{")).is_err() {
         return None;
     };
@@ -263,7 +263,7 @@ fn parse_block<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>,
 }
 
 fn parse_block_contents<'a>(
-    tokens: &'a Tokens,
+    tokens: &Tokens<'a>,
     at: &mut usize,
     end: (Kind, &str),
 ) -> Result<Ast<'a>, Error> {
@@ -306,7 +306,7 @@ fn parse_block_contents<'a>(
     })
 }
 
-fn parse_var<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
+fn parse_var<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
     let (token, fragment) = tokens.peek(at);
     traceln!("parse_var, token = {:?}", fragment);
 
@@ -351,7 +351,7 @@ fn parse_var<'a>(tokens: &'a Tokens, at: &mut usize) -> Option<Result<Ast<'a>, E
     }))
 }
 
-fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Ast<'a>, Error> {
+fn parse_factor<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Result<Ast<'a>, Error> {
     let (_, fragment) = tokens.peek(at);
     traceln!("parse_factor, token = {:?}", fragment);
 
@@ -377,7 +377,7 @@ fn parse_factor<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Ast<'a>, Error
     Err(Error::ExpectedTerm(tokens.peek(at).0.kind()))
 }
 
-fn parse_parenthesized<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Ast<'a>, Error> {
+fn parse_parenthesized<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Result<Ast<'a>, Error> {
     let (_, fragment) = tokens.peek(at);
     traceln!("parse_parenthesized, token = {:?}", fragment);
 
@@ -387,11 +387,11 @@ fn parse_parenthesized<'a>(tokens: &'a Tokens, at: &mut usize) -> Result<Ast<'a>
     res
 }
 
-fn parse_binary_expr_left<'a>(
-    tokens: &'a Tokens<'_>,
+fn parse_binary_expr_left<'a, 'b>(
+    tokens: &'b Tokens<'a>,
     at: &mut usize,
     ops: &[&str],
-    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Ast<'a>, Error>,
+    parse_term_fn: impl Fn(&'b Tokens<'a>, &mut usize) -> Result<Ast<'a>, Error>,
 ) -> Result<Ast<'a>, Error> {
     let (_, fragment) = tokens.peek(at);
     traceln!("parse_binary_expr_left for {ops:?}, token = {fragment:?} at {at}");
@@ -424,10 +424,10 @@ fn parse_binary_expr_left<'a>(
     result
 }
 
-fn parse_assignment_expr_right<'a>(
-    tokens: &'a Tokens<'_>,
+fn parse_assignment_expr_right<'a, 'b>(
+    tokens: &'b Tokens<'a>,
     at: &mut usize,
-    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Ast<'a>, Error>,
+    parse_term_fn: impl Fn(&'b Tokens<'a>, &mut usize) -> Result<Ast<'a>, Error>,
 ) -> Result<Ast<'a>, Error> {
     let (_, fragment) = tokens.peek(at);
     traceln!("parse_assignment_expr_right (=), token = {fragment:?} at {at}",);
@@ -456,11 +456,11 @@ fn parse_assignment_expr_right<'a>(
     Ok(right)
 }
 
-fn parse_unary_expr<'a>(
-    tokens: &'a Tokens<'_>,
+fn parse_unary_expr<'a, 'b>(
+    tokens: &'b Tokens<'a>,
     at: &mut usize,
     ops: &[&str],
-    parse_term_fn: impl Fn(&'a Tokens, &mut usize) -> Result<Ast<'a>, Error>,
+    parse_term_fn: impl Fn(&'b Tokens<'a>, &mut usize) -> Result<Ast<'a>, Error>,
 ) -> Result<Ast<'a>, Error> {
     let (_, fragment) = tokens.peek(at);
     traceln!("parse_unary_expr for {ops:?}, token = {fragment:?} at {at}");
@@ -482,7 +482,7 @@ fn parse_unary_expr<'a>(
     Ok(ast)
 }
 
-fn parse_expression<'a>(tokens: &'a Tokens<'_>, at: &mut usize) -> Result<Ast<'a>, Error> {
+fn parse_expression<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Result<Ast<'a>, Error> {
     parse_assignment_expr_right(tokens, at, |tokens, at| {
         parse_binary_expr_left(tokens, at, &["or"], |tokens, at| {
             parse_binary_expr_left(tokens, at, &["and"], |tokens, at| {
@@ -502,16 +502,16 @@ fn parse_expression<'a>(tokens: &'a Tokens<'_>, at: &mut usize) -> Result<Ast<'a
     })
 }
 
-impl<'a> Tokens<'a> {
-    fn peek_behind(&self, at: &usize) -> (Token, &'a str) {
+impl<'a, 'b> Tokens<'a> {
+    fn peek_behind(&'b self, at: &usize) -> (Token, &'a str) {
         self.peek(&(*at - 1))
     }
 
-    fn peek_ahead(&self, at: &usize) -> (Token, &'a str) {
+    fn peek_ahead(&'b self, at: &usize) -> (Token, &'a str) {
         self.peek(&(*at + 1))
     }
 
-    fn peek(&self, at: &usize) -> (Token, &'a str) {
+    fn peek(&'b self, at: &usize) -> (Token, &'a str) {
         match self.get(*at).cloned() {
             Some(token) => {
                 let fragment = token.as_str(self.code);
@@ -528,7 +528,7 @@ impl<'a> Tokens<'a> {
         }
     }
 
-    fn consume(&self, at: &mut usize) -> (Token, &'a str) {
+    fn consume(&'b self, at: &mut usize) -> (Token, &'a str) {
         let (token, fragment) = self.peek(at);
         traceln!("Tokens::consume, at = {}, token = {:?}", *at, fragment);
         *at += 1;
@@ -536,7 +536,7 @@ impl<'a> Tokens<'a> {
     }
 
     fn consume_expect(
-        &self,
+        &'b self,
         at: &mut usize,
         expected: (Kind, &str),
     ) -> Result<(Token, &'a str), Error> {
@@ -552,7 +552,7 @@ impl<'a> Tokens<'a> {
     }
 }
 
-pub fn parse<'a>(tokens: &'a Tokens) -> Result<Ast<'a>, Error> {
+pub fn parse<'a>(tokens: &Tokens<'a>) -> Result<Ast<'a>, Error> {
     start_trace!("Parser");
     let mut at = 0;
     let root = parse_block_contents(tokens, &mut at, (Kind::End, "EOF"))?;
