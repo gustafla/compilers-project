@@ -2,7 +2,7 @@
 name = "compilers-project"
 version = "0.1.0"
 edition = "2021"
-default-run = "standalone"
+default-run = "compiler"
 
 [dependencies]
 base64 = "0.22.1"
