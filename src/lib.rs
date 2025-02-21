@@ -1,11 +1,11 @@
-mod ast;
+pub mod ast;
 mod config;
 mod location;
 pub mod parser;
 pub mod tokenizer;
 mod trace;
 
-use ast::Ast;
+pub use ast::Ast;
 pub use config::Config;
 pub use location::Location;
 
