@@ -1,13 +1,13 @@
 use clap::Parser;
 use compilers_project::{
-    self,
+    self, Config,
     ast::{Ast, Expression, Literal, Op},
-    parse, Config,
+    parse,
 };
 use std::{
     collections::{
-        hash_map::{Entry, OccupiedEntry},
         HashMap,
+        hash_map::{Entry, OccupiedEntry},
     },
     error::Error,
     fs::{self},
