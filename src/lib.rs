@@ -5,7 +5,6 @@ pub mod parser;
 pub mod tokenizer;
 mod trace;
 
-pub use ast::Ast;
 pub use config::Config;
 pub use location::Location;
 
@@ -35,7 +34,7 @@ pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
     todo!()
 }
 
-pub fn parse<'a>(code: &'a str, config: &Config) -> Result<Ast<'a>, Error> {
+pub fn parse<'a>(code: &'a str, config: &Config) -> Result<ast::Ast<'a>, Error> {
     config::configure(config.clone()); // TODO: this thread_local "global" stinks
     let tokens = tokenizer::tokenize(code)?;
     let ast = parser::parse(&tokens)?;

@@ -1,8 +1,8 @@
 use clap::Parser;
 use compilers_project::{
     self,
-    ast::{Expression, Literal, Op},
-    parse, Ast, Config,
+    ast::{Ast, Expression, Literal, Op},
+    parse, Config,
 };
 use std::{
     collections::{
