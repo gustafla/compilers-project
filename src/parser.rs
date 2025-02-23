@@ -1,14 +1,14 @@
 mod tests;
 
 use crate::{
+    Location,
     ast::{
         Ast, BinaryOp, Block, Conditional, Expression, FnCall, Identifier, Int, Literal, Op,
-        UnaryOp, Var, While,
+        UnaryOp, Var, While, macros::ast,
     },
     config,
     tokenizer::{Kind, Token, Tokens},
     trace::{end_trace, start_trace, traceln},
-    Location,
 };
 use std::{num::ParseIntError, str::ParseBoolError};
 use thiserror::Error;
@@ -66,7 +66,7 @@ fn parse_op(tokens: &Tokens<'_>, at: &mut usize) -> Result<Op, Error> {
                     "=".into(),
                 ],
                 token: fragment.into(),
-            })
+            });
         }
     };
     traceln!("consuming...");
@@ -99,9 +99,10 @@ fn parse_literal<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'
         _ => return None,
     };
     let _ = tokens.consume(at);
-    Some(result.map(|lit| Ast {
-        location: token.location().clone(),
-        tree: Box::new(Expression::Literal(lit)),
+    Some(result.map(|lit| {
+        ast! {
+            token.location().clone() => Expression::Literal(lit)
+        }
     }))
 }
 
@@ -114,9 +115,8 @@ fn parse_identifier<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Ast<'a>> 
     }
 
     tokens.consume(at);
-    Some(Ast {
-        location: token.location().clone(),
-        tree: Box::new(Expression::Identifier(Identifier { name: fragment })),
+    Some(ast! {
+        token.location().clone() => Expression::Identifier(Identifier { name: fragment })
     })
 }
 
@@ -163,13 +163,8 @@ fn parse_conditional<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<A
     };
 
     let end = tokens.peek_behind(at).0.location().end();
-    Some(Ok(Ast {
-        location: (start..end).into(),
-        tree: Box::new(Expression::Conditional(Conditional {
-            condition,
-            then_expr,
-            else_expr,
-        })),
+    Some(Ok(ast! {
+        (start..end).into() => Expression::Conditional(Conditional { condition, then_expr, else_expr, })
     }))
 }
 
@@ -203,9 +198,8 @@ fn parse_while<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>
     };
 
     let end = tokens.peek_behind(at).0.location().end();
-    Some(Ok(Ast {
-        location: (start..end).into(),
-        tree: Box::new(Expression::While(While { condition, do_expr })),
+    Some(Ok(ast! {
+        (start..end).into() => Expression::While(While { condition, do_expr })
     }))
 }
 
@@ -245,12 +239,8 @@ fn parse_fn_call<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'
     }
 
     let end = tokens.peek_behind(at).0.location().end();
-    Some(Ok(Ast {
-        location: (start..end).into(),
-        tree: Box::new(Expression::FnCall(FnCall {
-            function,
-            arguments,
-        })),
+    Some(Ok(ast! {
+        (start..end).into() => Expression::FnCall(FnCall { function, arguments, })
     }))
 }
 
@@ -297,12 +287,8 @@ fn parse_block_contents<'a>(
     }
 
     let end = tokens.peek_behind(at).0.location().end();
-    Ok(Ast {
-        location: (start..end).into(),
-        tree: Box::new(Expression::Block(Block {
-            expressions,
-            result,
-        })),
+    Ok(ast! {
+        (start..end).into() => Expression::Block(Block { expressions, result, })
     })
 }
 
@@ -333,7 +319,7 @@ fn parse_var<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, 
             return Some(Err(Error::ExpectedOneOf {
                 of: vec!["=".to_owned()],
                 token: op.to_string(),
-            }))
+            }));
         }
         Err(e) => return Some(Err(e)),
     };
@@ -345,9 +331,8 @@ fn parse_var<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, 
     };
 
     let end = tokens.peek_behind(at).0.location().end();
-    Some(Ok(Ast {
-        location: (start..end).into(),
-        tree: Box::new(Expression::Var(Var { id, init })),
+    Some(Ok(ast! {
+        (start..end).into() => Expression::Var(Var { id, init })
     }))
 }
 
@@ -400,7 +385,7 @@ fn parse_binary_expr_left<'a, 'b>(
     let mut left = parse_term_fn(tokens, at)?;
     let start = left.location.start();
 
-    let result = loop {
+    loop {
         if !ops.contains(&tokens.peek(at).1) {
             break Ok(left);
         }
@@ -415,13 +400,10 @@ fn parse_binary_expr_left<'a, 'b>(
             Err(e) => break Err(e),
         };
 
-        left = Ast {
-            location: (start..right.location.end()).into(),
-            tree: Box::new(Expression::BinaryOp(BinaryOp { left, op, right })),
+        left = ast! {
+            (start..right.location.end()).into() => Expression::BinaryOp(BinaryOp { left, op, right })
         };
-    };
-
-    result
+    }
 }
 
 fn parse_assignment_expr_right<'a, 'b>(
@@ -443,13 +425,8 @@ fn parse_assignment_expr_right<'a, 'b>(
     let mut right = terms.pop().unwrap();
 
     while let Some(ast) = terms.pop() {
-        right = Ast {
-            location: (ast.location.start()..right.location.end()).into(),
-            tree: Box::new(Expression::BinaryOp(BinaryOp {
-                left: ast,
-                op: Op::Assign,
-                right,
-            })),
+        right = ast! {
+            (ast.location.start()..right.location.end()).into() => Expression::BinaryOp(BinaryOp { left: ast, op: Op::Assign, right, })
         };
     }
 
@@ -473,9 +450,8 @@ fn parse_unary_expr<'a, 'b>(
     let mut ast = parse_term_fn(tokens, at)?;
 
     while let Some((sign_start, op)) = op.pop() {
-        ast = Ast {
-            location: (sign_start..ast.location.end()).into(),
-            tree: Box::new(Expression::UnaryOp(UnaryOp { op, right: ast })),
+        ast = ast! {
+            (sign_start..ast.location.end()).into() =>Expression::UnaryOp(UnaryOp { op, right: ast })
         };
     }
 

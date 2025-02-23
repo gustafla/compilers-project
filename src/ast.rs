@@ -3,12 +3,13 @@ pub mod op;
 
 use std::fmt::Display;
 
-use crate::Location;
+use crate::{Location, Type};
 pub use op::Op;
 
 #[derive(Debug)]
 pub struct Ast<'a> {
     pub location: Location,
+    pub ty: Option<Type>,
     pub tree: Box<Expression<'a>>,
 }
 

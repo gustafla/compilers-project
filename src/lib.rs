@@ -8,6 +8,7 @@ mod typecheck;
 
 pub use config::Config;
 pub use location::Location;
+pub use typecheck::Type;
 
 use thiserror::Error;
 

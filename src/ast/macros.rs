@@ -1,7 +1,16 @@
 #![allow(unused_macros, unused_imports, reason = "Macros defined for testing")]
 
 macro_rules! ast {
-    {$e: expr $(,)?} => {Ast {location: Default::default(), tree: Box::new($e)}};
+    {$e: expr $(,)?} => {
+        ast!(Default::default() => {$e})
+    };
+    {$loc: expr => $e: expr $(,)?} => {
+        Ast {
+            location: $loc,
+            ty: None,
+            tree: Box::new($e)
+        }
+    };
 }
 
 macro_rules! op {
