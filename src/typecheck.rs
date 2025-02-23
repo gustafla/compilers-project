@@ -141,8 +141,8 @@ fn check_fn<'a>(
     Ok(*result)
 }
 
-fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, Error> {
-    let expr = ast.tree.as_ref();
+fn check<'a>(ast: &mut Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, Error> {
+    let expr = ast.tree.as_mut();
     traceln!("{expr}");
     let typ = match expr {
         Expression::Literal(literal) => match literal {
@@ -152,12 +152,12 @@ fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, E
         },
         Expression::Identifier(identifier) => resolve_sym(symtab, identifier.name)?.get().clone(),
         Expression::Conditional(conditional) => {
-            let condition = check(&conditional.condition, symtab)?;
+            let condition = check(&mut conditional.condition, symtab)?;
             if condition != Type::Bool {
                 return Err(Error::ConditionalCondition(condition));
             }
-            let then_typ = check(&conditional.then_expr, symtab)?;
-            if let Some(else_expr) = &conditional.else_expr {
+            let then_typ = check(&mut conditional.then_expr, symtab)?;
+            if let Some(else_expr) = &mut conditional.else_expr {
                 let else_typ = check(else_expr, symtab)?;
                 if then_typ != else_typ {
                     return Err(Error::ConditionalBranches(then_typ, else_typ));
@@ -173,17 +173,17 @@ fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, E
                 _ => unreachable!("Ast function call identifier is not an identifier"),
             };
             let mut arguments = Vec::new();
-            for arg in &fn_call.arguments {
+            for arg in &mut fn_call.arguments {
                 arguments.push(check(arg, symtab)?);
             }
             check_fn(symtab, key, &arguments)?
         }
         Expression::Block(block) => {
             symtab.push(HashMap::new());
-            for expr in &block.expressions {
+            for expr in &mut block.expressions {
                 check(expr, symtab)?;
             }
-            let result = if let Some(result) = &block.result {
+            let result = if let Some(result) = &mut block.result {
                 check(result, symtab)?
             } else {
                 Type::Unit
@@ -196,7 +196,7 @@ fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, E
                 Expression::Identifier(identifier) => identifier.name,
                 _ => unreachable!("Ast variable declaration identifier is not an identifier"),
             };
-            let typ = check(&var.init, symtab)?;
+            let typ = check(&mut var.init, symtab)?;
             if let Some(typed) = &var.typed {
                 if typ != *typed {
                     return Err(Error::AssignWrongType(
@@ -219,14 +219,14 @@ fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, E
                     expr => return Err(Error::AssignWrongExpr(format!("{}", expr))),
                 };
                 let lhs = resolve_sym(symtab, key)?.get().clone();
-                let rhs = check(&binary_op.right, symtab)?;
+                let rhs = check(&mut binary_op.right, symtab)?;
                 if lhs != rhs {
                     return Err(Error::AssignWrongType(String::from(key), lhs, rhs));
                 }
                 Type::Unit
             } else {
-                let lhs = check(&binary_op.left, symtab)?;
-                let rhs = check(&binary_op.right, symtab)?;
+                let lhs = check(&mut binary_op.left, symtab)?;
+                let rhs = check(&mut binary_op.right, symtab)?;
                 match (binary_op.op, &[lhs, rhs]) {
                     (op @ (Op::Eq | Op::Ne), [a, b]) => {
                         if a == b {
@@ -259,15 +259,16 @@ fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, E
                 Op::Not => "unary_not",
                 op => unreachable!("Ast has {op:#?} in UnaryOp"),
             };
-            let arguments = &[check(&unary_op.right, symtab)?];
+            let arguments = &[check(&mut unary_op.right, symtab)?];
             check_fn(symtab, key, arguments)?
         }
         Expression::While(_) => Type::Unit,
     };
+    ast.ty = Some(typ.clone());
     Ok(typ)
 }
 
-pub fn typecheck(ast: &Ast<'_>) -> Result<Type, Error> {
+pub fn typecheck(ast: &mut Ast<'_>) -> Result<Type, Error> {
     start_trace!("Type checker");
     let mut symtab = vec![HashMap::from([
         ("print_int", fun!((Type::Int) => Type::Unit)),

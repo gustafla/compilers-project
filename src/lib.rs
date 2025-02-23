@@ -33,8 +33,9 @@ pub fn print_error(mut error: &dyn std::error::Error) {
 pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
     config::configure(config.clone()); // TODO: this thread_local "global" stinks
     let tokens = tokenizer::tokenize(code)?;
-    let ast = parser::parse(&tokens)?;
-    dbg!(typecheck::typecheck(&ast)?);
+    let mut ast = parser::parse(&tokens)?;
+    typecheck::typecheck(&mut ast)?;
+    dbg!(ast);
     todo!()
 }
 
