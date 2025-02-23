@@ -192,23 +192,37 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
             // Interpret rhs
             let b = interpret(&binary_op.right, symtab);
 
-            // Delegate to builtins
-            match binary_op.op {
-                Op::Add => call!(symtab, "binary_add", &[a, b]),
-                Op::Sub => call!(symtab, "binary_sub", &[a, b]),
-                Op::Mul => call!(symtab, "binary_mul", &[a, b]),
-                Op::Div => call!(symtab, "binary_div", &[a, b]),
-                Op::Rem => call!(symtab, "binary_rem", &[a, b]),
-                Op::Eq => call!(symtab, "binary_eq", &[a, b]),
-                Op::Ne => call!(symtab, "binary_ne", &[a, b]),
-                Op::Leq => call!(symtab, "binary_leq", &[a, b]),
-                Op::Lt => call!(symtab, "binary_lt", &[a, b]),
-                Op::Geq => call!(symtab, "binary_geq", &[a, b]),
-                Op::Gt => call!(symtab, "binary_gt", &[a, b]),
-                Op::And => call!(symtab, "binary_and", &[a, b]),
-                Op::Or => call!(symtab, "binary_or", &[a, b]),
-                Op::Not => unreachable!("Ast has Op::Not in a binary operation"),
-                Op::Assign => unreachable!("Op::Assign should have been handled in a special case"),
+            // Special cases: Eq and Ne
+            match (a, binary_op.op, b) {
+                (Value::Int(a), Op::Eq, Value::Int(b)) => Value::Bool(a == b),
+                (Value::Bool(a), Op::Eq, Value::Bool(b)) => Value::Bool(a == b),
+                (Value::Unit, Op::Eq, Value::Unit) => Value::Bool(true),
+                (Value::Int(a), Op::Ne, Value::Int(b)) => Value::Bool(a != b),
+                (Value::Bool(a), Op::Ne, Value::Bool(b)) => Value::Bool(a != b),
+                (Value::Unit, Op::Ne, Value::Unit) => Value::Bool(false),
+                (_, op @ (Op::Eq | Op::Ne), _) => {
+                    panic!(
+                        "Invalid arguments to {op}, expected to have same type between operands",
+                    );
+                }
+                // Delegate rest to builtins
+                (a, op, b) => match op {
+                    Op::Add => call!(symtab, "binary_add", &[a, b]),
+                    Op::Sub => call!(symtab, "binary_sub", &[a, b]),
+                    Op::Mul => call!(symtab, "binary_mul", &[a, b]),
+                    Op::Div => call!(symtab, "binary_div", &[a, b]),
+                    Op::Rem => call!(symtab, "binary_rem", &[a, b]),
+                    Op::Leq => call!(symtab, "binary_leq", &[a, b]),
+                    Op::Lt => call!(symtab, "binary_lt", &[a, b]),
+                    Op::Geq => call!(symtab, "binary_geq", &[a, b]),
+                    Op::Gt => call!(symtab, "binary_gt", &[a, b]),
+                    Op::And => call!(symtab, "binary_and", &[a, b]),
+                    Op::Or => call!(symtab, "binary_or", &[a, b]),
+                    op @ Op::Not => unreachable!("Ast has {op} in a binary operation"),
+                    op @ (Op::Assign | Op::Eq | Op::Ne) => {
+                        unreachable!("{op:#?} should have been handled in a special case")
+                    }
+                },
             }
         }
         Expression::UnaryOp(unary_op) => {
@@ -286,12 +300,6 @@ fn main() {
         }),
         fun!("binary_rem", [Value::Int(a), Value::Int(b)], {
             Value::Int(a % b)
-        }),
-        fun!("binary_eq", [Value::Int(a), Value::Int(b)], {
-            Value::Bool(a == b)
-        }),
-        fun!("binary_neq", [Value::Int(a), Value::Int(b)], {
-            Value::Bool(a != b)
         }),
         fun!("binary_lt", [Value::Int(a), Value::Int(b)], {
             Value::Bool(a < b)
