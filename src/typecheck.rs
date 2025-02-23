@@ -1,4 +1,7 @@
-use crate::ast::{Ast, Expression, Literal, Op};
+use crate::{
+    ast::{Ast, Expression, Literal, Op},
+    trace::{end_trace, start_trace, trace},
+};
 use std::{
     collections::hash_map::{Entry, HashMap, OccupiedEntry},
     fmt::Display,
@@ -25,6 +28,8 @@ pub enum Error {
     AssignWrongExpr(String),
     #[error("Cannot assign {2} to {0}, it has type {1}")]
     AssignWrongType(String, Type, Type),
+    #[error("Cannot redefine variable {0}")]
+    Redefinition(String),
 }
 
 macro_rules! fun {
@@ -107,7 +112,9 @@ fn check_fn<'a>(
 }
 
 fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, Error> {
-    let typ = match ast.tree.as_ref() {
+    let expr = ast.tree.as_ref();
+    trace!("{expr} ");
+    let typ = match expr {
         Expression::Literal(literal) => match literal {
             Literal::Int(_) => Type::Int,
             Literal::Bool(_) => Type::Bool,
@@ -143,6 +150,9 @@ fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, E
         }
         Expression::Block(block) => {
             symtab.push(HashMap::new());
+            for expr in &block.expressions {
+                check(expr, symtab)?;
+            }
             let result = if let Some(result) = &block.result {
                 check(result, symtab)?
             } else {
@@ -157,7 +167,9 @@ fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, E
                 _ => unreachable!("Ast variable declaration identifier is not an identifier"),
             };
             let typ = check(&var.init, symtab)?;
-            symtab.last_mut().unwrap().insert(key, typ);
+            if symtab.last_mut().unwrap().insert(key, typ).is_some() {
+                return Err(Error::Redefinition(String::from(key)));
+            }
             Type::Unit
         }
         Expression::BinaryOp(binary_op) => {
@@ -217,6 +229,7 @@ fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, E
 }
 
 pub fn typecheck(ast: &Ast<'_>) -> Result<Type, Error> {
+    start_trace!("Type checker");
     let mut symtab = vec![HashMap::from([
         ("print_int", fun!((Type::Int) => Type::Unit)),
         ("print_bool", fun!((Type::Bool) => Type::Unit)),
@@ -235,5 +248,7 @@ pub fn typecheck(ast: &Ast<'_>) -> Result<Type, Error> {
         ("binary_or", fun!((Type::Bool, Type::Bool) => Type::Bool)),
         ("unary_not", fun!((Type::Bool) => Type::Bool)),
     ])];
-    check(ast, &mut symtab)
+    let res = check(ast, &mut symtab);
+    end_trace!();
+    res
 }

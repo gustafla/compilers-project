@@ -33,7 +33,7 @@ pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
     config::configure(config.clone()); // TODO: this thread_local "global" stinks
     let tokens = tokenizer::tokenize(code)?;
     let ast = parser::parse(&tokens)?;
-    typecheck::typecheck(&ast)?;
+    dbg!(typecheck::typecheck(&ast)?);
     todo!()
 }
 
