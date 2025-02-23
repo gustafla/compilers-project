@@ -1,7 +1,7 @@
 mod tests;
 
 use crate::{
-    Location,
+    Location, Type,
     ast::{
         Ast, BinaryOp, Block, Conditional, Expression, FnCall, Identifier, Int, Literal, Op,
         UnaryOp, Var, While, macros::ast,
@@ -10,7 +10,10 @@ use crate::{
     tokenizer::{Kind, Token, Tokens},
     trace::{end_trace, start_trace, traceln},
 };
-use std::{num::ParseIntError, str::ParseBoolError};
+use std::{
+    num::ParseIntError,
+    str::{FromStr, ParseBoolError},
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -29,6 +32,10 @@ pub enum Error {
     ExpectedComma(Kind),
     #[error("Expected keyword `{0}`, but encountered {1:?}")]
     ExpectedKeyword(String, Kind),
+    #[error("Expected type, but encountered {0:?}")]
+    ExpectedType(Kind),
+    #[error("Can't parse type: {0}")]
+    Type(String),
     #[error("Cannot parse {token:?} as a boolean")]
     Bool {
         token: String,
@@ -312,6 +319,20 @@ fn parse_var<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, 
         return Some(Err(Error::ExpectedIdentifier(tokens.peek(at).0.kind())));
     };
 
+    // : <type>
+    let ty = match tokens.consume_expect(at, (Kind::Punctuation, ":")) {
+        Ok(_) => match tokens.consume(at) {
+            (token, fragment) if token.kind() == Kind::Identifier => {
+                match Type::from_str(fragment) {
+                    Ok(ty) => Some(ty),
+                    Err(s) => return Some(Err(Error::Type(s))),
+                }
+            }
+            (token, _) => return Some(Err(Error::ExpectedType(token.kind()))),
+        },
+        Err(_) => None,
+    };
+
     // Op::Assign
     match parse_op(tokens, at) {
         Ok(Op::Assign) => {}
@@ -332,7 +353,7 @@ fn parse_var<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, 
 
     let end = tokens.peek_behind(at).0.location().end();
     Some(Ok(ast! {
-        (start..end).into() => Expression::Var(Var { id, init })
+        (start..end).into() => Expression::Var(Var { id, ty, init })
     }))
 }
 

@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use crate::{ast::macros::*, tokenizer};
+use crate::{Type, ast::macros::*, tokenizer};
 
 impl PartialEq for Expression<'_> {
     fn eq(&self, other: &Self) -> bool {
@@ -374,8 +374,7 @@ fn nested_unary() {
 
 #[test]
 fn precedence_complex() {
-    let code =
-        "- if true then a = 1 or 1 and 1 == 1 != 1 < 1 <= 1 > 1 >= 1 + 1 - 1 * 1 / 1 % -1 = x else xd";
+    let code = "- if true then a = 1 or 1 and 1 == 1 != 1 < 1 <= 1 > 1 >= 1 + 1 - 1 * 1 / 1 % -1 = x else xd";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
     assert_eq!(
@@ -784,4 +783,17 @@ fn while_loop() {
             }
         }
     );
+}
+
+#[test]
+fn var_typed() {
+    let code = "var x: Int = 1 + 1";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        blk! {,
+            var!(("x", Type::Int) = op!{int!(1), Op::Add, int!(1)})
+        }
+    )
 }

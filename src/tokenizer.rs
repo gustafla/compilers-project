@@ -2,8 +2,8 @@ mod exercises;
 mod tests;
 
 use crate::{
-    trace::{end_trace, start_trace, trace},
     Location,
+    trace::{end_trace, start_trace, trace},
 };
 use regex::Regex;
 use std::{
@@ -115,7 +115,7 @@ static REGULAR_EXPRESSIONS: LazyLock<[(Regex, Option<Kind>); 8]> = LazyLock::new
             Some(Kind::Operator)
         ),
         // Punctuation
-        (r#"^[(){},;]"#, Some(Kind::Punctuation)),
+        (r#"^[(){},:;]"#, Some(Kind::Punctuation)),
         // Identifier
         (
             r#"^[[:alpha:]_][[:alpha:]_[:digit:]]*"#,

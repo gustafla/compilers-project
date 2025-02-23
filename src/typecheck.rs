@@ -5,6 +5,7 @@ use crate::{
 use std::{
     collections::hash_map::{Entry, HashMap, OccupiedEntry},
     fmt::Display,
+    str::FromStr,
 };
 use thiserror::Error;
 
@@ -70,6 +71,35 @@ impl Display for Type {
             },
         }
         Ok(())
+    }
+}
+
+impl FromStr for Type {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.split_once("=>") {
+            None => match s {
+                "Int" => return Ok(Type::Int),
+                "Bool" => return Ok(Type::Bool),
+                "Unit" => return Ok(Type::Unit),
+                _ => {}
+            },
+            Some((par, res)) => {
+                let result = Self::from_str(res.trim_start())?;
+                let mut parameters = Vec::new();
+                if let Some(par) = par.strip_prefix("(").and_then(|par| par.strip_suffix(")")) {
+                    for par in par.split(",") {
+                        parameters.push(Self::from_str(par.trim())?);
+                    }
+                }
+                return Ok(Self::Fun {
+                    parameters,
+                    result: Box::new(result),
+                });
+            }
+        };
+        Err(format!("Malformed type `{}`", s))
     }
 }
 
