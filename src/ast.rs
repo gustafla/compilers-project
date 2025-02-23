@@ -69,7 +69,7 @@ pub struct Conditional<'a> {
 
 #[derive(Debug)]
 pub struct FnCall<'a> {
-    pub function: Ast<'a>,
+    pub function: Identifier<'a>,
     pub arguments: Vec<Ast<'a>>,
 }
 
@@ -81,7 +81,7 @@ pub struct Block<'a> {
 
 #[derive(Debug)]
 pub struct Var<'a> {
-    pub id: Ast<'a>,
+    pub id: Identifier<'a>,
     pub typed: Option<Type>,
     pub init: Ast<'a>,
 }

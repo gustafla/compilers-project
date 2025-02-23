@@ -121,10 +121,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
             }
         }
         Expression::FnCall(fn_call) => {
-            let key = match fn_call.function.tree.as_ref() {
-                Expression::Identifier(identifier) => identifier.name,
-                _ => unreachable!("Ast function call identifier is not an identifier"),
-            };
+            let key = fn_call.function.name;
             let mut args: Vec<Value> = Vec::new();
             for arg in &fn_call.arguments {
                 args.push(interpret(arg, symtab));
@@ -148,10 +145,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
             result
         }
         Expression::Var(var) => {
-            let key = match var.id.tree.as_ref() {
-                Expression::Identifier(identifier) => identifier.name,
-                _ => unreachable!("Ast variable declaration identifier is not an identifier"),
-            };
+            let key = var.id.name;
             let value = interpret(&var.init, symtab);
             if symtab.last_mut().unwrap().insert(key, value).is_some() {
                 panic!("Identifier {key} is already defined (can't shadow in the same scope)");

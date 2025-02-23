@@ -219,7 +219,10 @@ fn parse_fn_call<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'
         return None;
     };
     let start = t0.location().start();
-    let function = parse_identifier(tokens, at).unwrap();
+    let id = parse_identifier(tokens, at).map(|ast| *ast.tree);
+    let Some(Expression::Identifier(function)) = id else {
+        unreachable!("Token should have been be an identifier");
+    };
 
     // Consume opening paren
     tokens.consume(at);
@@ -315,7 +318,8 @@ fn parse_var<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, 
     // Also, I'd have to verify that it has at least one =
 
     // <id>
-    let Some(id) = parse_identifier(tokens, at) else {
+    let id = parse_identifier(tokens, at).map(|ast| *ast.tree);
+    let Some(Expression::Identifier(id)) = id else {
         return Some(Err(Error::ExpectedIdentifier(tokens.peek(at).0.kind())));
     };
 

@@ -168,10 +168,7 @@ fn check<'a>(ast: &mut Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Typ
             }
         }
         Expression::FnCall(fn_call) => {
-            let key = match fn_call.function.tree.as_ref() {
-                Expression::Identifier(identifier) => identifier.name,
-                _ => unreachable!("Ast function call identifier is not an identifier"),
-            };
+            let key = fn_call.function.name;
             let mut arguments = Vec::new();
             for arg in &mut fn_call.arguments {
                 arguments.push(check(arg, symtab)?);
@@ -192,10 +189,7 @@ fn check<'a>(ast: &mut Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Typ
             result
         }
         Expression::Var(var) => {
-            let key = match var.id.tree.as_ref() {
-                Expression::Identifier(identifier) => identifier.name,
-                _ => unreachable!("Ast variable declaration identifier is not an identifier"),
-            };
+            let key = var.id.name;
             let typ = check(&mut var.init, symtab)?;
             if let Some(typed) = &var.typed {
                 if typ != *typed {

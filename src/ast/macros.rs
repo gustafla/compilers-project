@@ -91,7 +91,7 @@ macro_rules! fun {
     };
     ($id: literal, $($arg: expr),*) => {
         ast! {Expression::FnCall(FnCall {
-            function: id!($id),
+            function: Identifier{name: $id},
             arguments: vec![$( $arg ),*],
         })}
     };
@@ -115,14 +115,14 @@ macro_rules! blk {
 macro_rules! var {
     ($id: literal = $init: expr) => {
         ast! {Expression::Var(Var {
-            id: id!($id),
+            id: Identifier{name: $id},
             typed: None,
             init: $init,
         })}
     };
     (($id: literal, $ty: expr) = $init: expr) => {
         ast! {Expression::Var(Var {
-            id: id!($id),
+            id: Identifier{name: $id},
             typed: Some($ty),
             init: $init,
         })}
