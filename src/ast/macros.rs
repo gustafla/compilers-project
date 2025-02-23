@@ -116,14 +116,14 @@ macro_rules! var {
     ($id: literal = $init: expr) => {
         ast! {Expression::Var(Var {
             id: id!($id),
-            ty: None,
+            typed: None,
             init: $init,
         })}
     };
     (($id: literal, $ty: expr) = $init: expr) => {
         ast! {Expression::Var(Var {
             id: id!($id),
-            ty: Some($ty),
+            typed: Some($ty),
             init: $init,
         })}
     };

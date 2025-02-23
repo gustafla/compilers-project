@@ -320,7 +320,7 @@ fn parse_var<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, 
     };
 
     // : <type>
-    let ty = match tokens.consume_expect(at, (Kind::Punctuation, ":")) {
+    let typed = match tokens.consume_expect(at, (Kind::Punctuation, ":")) {
         Ok(_) => match tokens.consume(at) {
             (token, fragment) if token.kind() == Kind::Identifier => {
                 match Type::from_str(fragment) {
@@ -353,7 +353,7 @@ fn parse_var<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, 
 
     let end = tokens.peek_behind(at).0.location().end();
     Some(Ok(ast! {
-        (start..end).into() => Expression::Var(Var { id, ty, init })
+        (start..end).into() => Expression::Var(Var { id, typed, init })
     }))
 }
 

@@ -1,6 +1,6 @@
 use crate::{
     ast::{Ast, Expression, Literal, Op},
-    trace::{end_trace, start_trace, trace},
+    trace::{end_trace, start_trace, traceln},
 };
 use std::{
     collections::hash_map::{Entry, HashMap, OccupiedEntry},
@@ -143,7 +143,7 @@ fn check_fn<'a>(
 
 fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, Error> {
     let expr = ast.tree.as_ref();
-    trace!("{expr} ");
+    traceln!("{expr}");
     let typ = match expr {
         Expression::Literal(literal) => match literal {
             Literal::Int(_) => Type::Int,
@@ -197,6 +197,15 @@ fn check<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, E
                 _ => unreachable!("Ast variable declaration identifier is not an identifier"),
             };
             let typ = check(&var.init, symtab)?;
+            if let Some(typed) = &var.typed {
+                if typ != *typed {
+                    return Err(Error::AssignWrongType(
+                        format!("var {key}"),
+                        typed.clone(),
+                        typ,
+                    ));
+                }
+            }
             if symtab.last_mut().unwrap().insert(key, typ).is_some() {
                 return Err(Error::Redefinition(String::from(key)));
             }

@@ -82,7 +82,7 @@ pub struct Block<'a> {
 #[derive(Debug)]
 pub struct Var<'a> {
     pub id: Ast<'a>,
-    pub ty: Option<Type>,
+    pub typed: Option<Type>,
     pub init: Ast<'a>,
 }
 
