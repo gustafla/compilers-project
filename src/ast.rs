@@ -1,6 +1,8 @@
 pub mod macros;
 pub mod op;
 
+use std::fmt::Display;
+
 use crate::Location;
 pub use op::Op;
 
@@ -21,6 +23,26 @@ pub enum Expression<'a> {
     BinaryOp(BinaryOp<'a>),
     UnaryOp(UnaryOp<'a>),
     While(While<'a>),
+}
+
+impl Display for Expression<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Expression::Literal(_) => "literal",
+                Expression::Identifier(_) => "identifier",
+                Expression::Conditional(_) => "conditional",
+                Expression::FnCall(_) => "function call",
+                Expression::Block(_) => "block",
+                Expression::Var(_) => "variable declaration",
+                Expression::BinaryOp(_) => "binary operation",
+                Expression::UnaryOp(_) => "unary operation",
+                Expression::While(_) => "while loop",
+            }
+        )
+    }
 }
 
 pub type Int = i64;

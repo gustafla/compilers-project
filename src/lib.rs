@@ -4,6 +4,7 @@ mod location;
 pub mod parser;
 pub mod tokenizer;
 mod trace;
+mod typecheck;
 
 pub use config::Config;
 pub use location::Location;
@@ -16,6 +17,8 @@ pub enum Error {
     Tokenize(#[from] tokenizer::Error),
     #[error("Could not parse token list")]
     Parse(#[from] parser::Error),
+    #[error("Type checker rejected the program")]
+    TypeCheck(#[from] typecheck::Error),
 }
 
 pub fn print_error(mut error: &dyn std::error::Error) {
@@ -26,11 +29,11 @@ pub fn print_error(mut error: &dyn std::error::Error) {
     }
 }
 
-#[expect(unused_variables, reason = "Unimplemented")]
 pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
     config::configure(config.clone()); // TODO: this thread_local "global" stinks
     let tokens = tokenizer::tokenize(code)?;
     let ast = parser::parse(&tokens)?;
+    typecheck::typecheck(&ast)?;
     todo!()
 }
 

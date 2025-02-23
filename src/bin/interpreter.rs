@@ -153,7 +153,9 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
                 _ => unreachable!("Ast variable declaration identifier is not an identifier"),
             };
             let value = interpret(&var.init, symtab);
-            symtab.last_mut().unwrap().insert(key, value);
+            if symtab.last_mut().unwrap().insert(key, value).is_some() {
+                panic!("Identifier {key} is already defined (can't shadow in the same scope)");
+            };
             Value::Unit
         }
         Expression::BinaryOp(binary_op) => {
