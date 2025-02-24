@@ -1,63 +1,40 @@
-use std::{borrow::Borrow, fmt::Display};
+use crate::{SymbolTable, Type, ast::Ast};
+use std::{borrow::Cow, fmt::Display};
 
-use crate::{Type, ast::Ast};
-
-macro_rules! string_type {
-    ($name: ident) => {
-        #[derive(Debug, PartialEq, Eq, Hash)]
-        pub struct $name(Box<str>);
-        impl Borrow<str> for $name {
-            fn borrow(&self) -> &str {
-                self.0.as_ref()
-            }
-        }
-        impl From<&str> for $name {
-            fn from(value: &str) -> Self {
-                Self(String::from(value).into_boxed_str())
-            }
-        }
-        impl Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", Borrow::<str>::borrow(self))
-            }
-        }
-    };
-}
-
-string_type!(Var);
-string_type!(Label);
+type Var<'a> = Cow<'a, str>;
+type Label<'a> = Cow<'a, str>;
 
 #[derive(Debug)]
-pub enum Instruction {
+pub enum Instruction<'a> {
     LoadBoolConst {
         value: bool,
-        dest: Var,
+        dest: Var<'a>,
     },
     LoadIntConst {
         value: bool,
-        dest: Var,
+        dest: Var<'a>,
     },
     Copy {
-        source: Var,
-        dest: Var,
+        source: Var<'a>,
+        dest: Var<'a>,
     },
     Call {
-        fun: Var,
-        args: Vec<Var>,
-        dest: Var,
+        fun: Var<'a>,
+        args: Vec<Var<'a>>,
+        dest: Var<'a>,
     },
     Jump {
-        label: Label,
+        label: Label<'a>,
     },
     CondJump {
-        cond: Var,
-        then_label: Label,
-        else_label: Label,
+        cond: Var<'a>,
+        then_label: Label<'a>,
+        else_label: Label<'a>,
     },
-    Label(Label),
+    Label(Label<'a>),
 }
 
-impl Display for Instruction {
+impl Display for Instruction<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Instruction::LoadBoolConst { value, dest } => {
@@ -96,6 +73,11 @@ impl Display for Instruction {
     }
 }
 
-pub fn generate_ir<'a>(ast: &Ast<'a>, root_types: &[(&'a str, Type)]) -> Vec<Instruction> {
+pub fn generate_ir<'a>(ast: &Ast<'a>, root_types: &[(&'a str, Type)]) -> Vec<Instruction<'a>> {
+    let root_vars: Vec<(&str, Var)> = root_types
+        .iter()
+        .map(|(k, _)| (*k, Var::from(*k)))
+        .collect();
+    let mut symtab = SymbolTable::from(root_vars);
     todo!()
 }

@@ -1,20 +1,36 @@
-use std::collections::hash_map::{Entry, HashMap, OccupiedEntry};
+use std::{
+    borrow::Cow,
+    collections::hash_map::{Entry, HashMap, OccupiedEntry},
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 #[error("Unresolved identifier {0:?}")]
 pub struct Error(String);
 
-pub struct SymbolTable<'a, T: Clone>(Vec<HashMap<&'a str, T>>);
+#[doc(alias = "SymTab")]
+pub struct SymbolTable<'a, T>(Vec<HashMap<Cow<'a, str>, T>>);
 
-impl<'a, T: Clone> SymbolTable<'a, T> {
-    pub fn new(root: &[(&'a str, T)]) -> Self {
-        Self(vec![root.iter().cloned().collect()])
+impl<'a, K, T, I> From<I> for SymbolTable<'a, T>
+where
+    I: IntoIterator<Item = (K, T)>,
+    Cow<'a, str>: From<K>,
+{
+    fn from(value: I) -> Self {
+        Self(vec![
+            value.into_iter().map(|(k, v)| (Cow::from(k), v)).collect(),
+        ])
+    }
+}
+
+impl<'a, T> SymbolTable<'a, T> {
+    pub fn new() -> Self {
+        Self(vec![HashMap::new()])
     }
 
-    pub fn resolve(&mut self, key: &'a str) -> Result<OccupiedEntry<'_, &'a str, T>, Error> {
+    pub fn resolve(&mut self, key: &'a str) -> Result<OccupiedEntry<'_, Cow<'a, str>, T>, Error> {
         for table in self.0.iter_mut().rev() {
-            if let Entry::Occupied(entry) = table.entry(key) {
+            if let Entry::Occupied(entry) = table.entry(key.into()) {
                 return Ok(entry);
             }
         }
@@ -27,9 +43,18 @@ impl<'a, T: Clone> SymbolTable<'a, T> {
 
     pub fn pop(&mut self) {
         self.0.pop();
+        if self.0.is_empty() {
+            panic!("Symbol table root was popped");
+        }
     }
 
     pub fn insert(&mut self, key: &'a str, value: T) -> Option<T> {
-        self.0.last_mut().unwrap().insert(key, value)
+        self.0.last_mut().unwrap().insert(key.into(), value)
+    }
+}
+
+impl<T> Default for SymbolTable<'_, T> {
+    fn default() -> Self {
+        Self::new()
     }
 }

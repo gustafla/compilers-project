@@ -238,7 +238,7 @@ fn visit<'a>(ast: &mut Ast<'a>, symtab: &mut SymbolTable<'a, Type>) -> Result<Ty
 
 pub fn typecheck<'a>(ast: &mut Ast<'a>, root_types: &[(&'a str, Type)]) -> Result<Type, Error> {
     start_trace!("Type checker");
-    let mut symtab = SymbolTable::new(root_types);
+    let mut symtab = SymbolTable::from(root_types.to_owned());
     let res = visit(ast, &mut symtab);
     end_trace!();
     res

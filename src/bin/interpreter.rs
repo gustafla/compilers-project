@@ -258,7 +258,7 @@ fn main() {
         Err(ref e) => err!(e),
     };
 
-    let mut symtab = SymbolTable::new(&[
+    let mut symtab = SymbolTable::from(vec![
         fun!("print_int", [Value::Int(a)], {
             println!("{}", a);
             Value::Unit
