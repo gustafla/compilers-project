@@ -1,14 +1,10 @@
 use clap::Parser;
 use compilers_project::{
-    self, Config,
+    self, Config, SymbolTable,
     ast::{Ast, Expression, Literal, Op},
     parse,
 };
 use std::{
-    collections::{
-        HashMap,
-        hash_map::{Entry, OccupiedEntry},
-    },
     error::Error,
     fs::{self},
     io::{self},
@@ -43,9 +39,18 @@ macro_rules! fun {
 
 macro_rules! call {
     ($symtab: expr, $id: literal, $args: expr) => {
-        match resolve_sym($symtab, $id).get() {
+        match resolve!($symtab, $id).get() {
             Value::Fun(f) => f($args),
             _ => unreachable!("Invalid builtin call"),
+        }
+    };
+}
+
+macro_rules! resolve {
+    ($symtab: expr, $key: expr) => {
+        match $symtab.resolve($key) {
+            Ok(value) => value,
+            Err(e) => panic!("{e:?}"),
         }
     };
 }
@@ -90,24 +95,10 @@ impl From<&Literal<'_>> for Value {
     }
 }
 
-type SymbolTable<'a> = HashMap<&'a str, Value>;
-
-fn resolve_sym<'a, 'b>(
-    symtab: &'b mut [SymbolTable<'a>],
-    key: &'a str,
-) -> OccupiedEntry<'b, &'a str, Value> {
-    for table in symtab.iter_mut().rev() {
-        if let Entry::Occupied(entry) = table.entry(key) {
-            return entry;
-        }
-    }
-    panic!("unresolved identifier: {}", key);
-}
-
-fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
+fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
     match ast.tree.as_ref() {
         Expression::Literal(literal) => literal.into(),
-        Expression::Identifier(identifier) => resolve_sym(symtab, identifier.name).get().clone(),
+        Expression::Identifier(identifier) => resolve!(symtab, identifier.name).get().clone(),
         Expression::Conditional(conditional) => {
             let Value::Bool(condition) = interpret(&conditional.condition, symtab) else {
                 panic!("if requires a boolean expression");
@@ -126,13 +117,13 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
             for arg in &fn_call.arguments {
                 args.push(interpret(arg, symtab));
             }
-            match resolve_sym(symtab, key).get() {
+            match resolve!(symtab, key).get() {
                 Value::Fun(f) => f(&args),
                 _ => panic!("{} is not a function", key),
             }
         }
         Expression::Block(block) => {
-            symtab.push(HashMap::new());
+            symtab.push();
             for expr in &block.expressions {
                 interpret(expr, symtab);
             }
@@ -147,7 +138,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
         Expression::Var(var) => {
             let key = var.id.name;
             let value = interpret(&var.init, symtab);
-            if symtab.last_mut().unwrap().insert(key, value).is_some() {
+            if symtab.insert(key, value).is_some() {
                 panic!("Identifier {key} is already defined (can't shadow in the same scope)");
             };
             Value::Unit
@@ -160,7 +151,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Value {
                     _ => panic!("= requires identifier on the lhs"),
                 };
                 let value = interpret(&binary_op.right, symtab);
-                resolve_sym(symtab, key).insert(value);
+                resolve!(symtab, key).insert(value);
                 return Value::Unit;
             }
 
@@ -267,7 +258,7 @@ fn main() {
         Err(ref e) => err!(e),
     };
 
-    let mut symtab = vec![HashMap::from([
+    let mut symtab = SymbolTable::new(&[
         fun!("print_int", [Value::Int(a)], {
             println!("{}", a);
             Value::Unit
@@ -316,7 +307,7 @@ fn main() {
             Value::Bool(*a || *b)
         }),
         fun!("unary_not", [Value::Bool(a)], Value::Bool(!a)),
-    ])];
+    ]);
 
     let code = match interpret(&ast, &mut symtab) {
         Value::Int(i) => i.clamp(0, 255) as i32,

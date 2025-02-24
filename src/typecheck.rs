@@ -1,18 +1,15 @@
 use crate::{
+    SymbolTable,
     ast::{Ast, Expression, Literal, Op},
     trace::{end_trace, start_trace, traceln},
 };
-use std::{
-    collections::hash_map::{Entry, HashMap, OccupiedEntry},
-    fmt::Display,
-    str::FromStr,
-};
+use std::{fmt::Display, str::FromStr};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Unresolved identifier {0:?}")]
-    UnresolvedIdentifier(String),
+    #[error(transparent)]
+    UnresolvedIdentifier(#[from] crate::symtab::Error),
     #[error("Conditional expression branches have incompatible types `if .. then {0} else {1}`")]
     ConditionalBranches(Type, Type),
     #[error("Conditional expression condition has an incompatible type `if {0} then ..`")]
@@ -31,15 +28,6 @@ pub enum Error {
     AssignWrongType(String, Type, Type),
     #[error("Cannot redefine variable {0}")]
     Redefinition(String),
-}
-
-macro_rules! fun {
-    (($($par: expr),*$(,)?) => $res: expr) => {
-        Type::Fun {
-            parameters: vec![$($par),*],
-            result: Box::new($res),
-        }
-    };
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,26 +91,12 @@ impl FromStr for Type {
     }
 }
 
-type SymbolTable<'a> = HashMap<&'a str, Type>;
-
-fn resolve_sym<'a, 'b>(
-    symtab: &'b mut [SymbolTable<'a>],
-    key: &'a str,
-) -> Result<OccupiedEntry<'b, &'a str, Type>, Error> {
-    for table in symtab.iter_mut().rev() {
-        if let Entry::Occupied(entry) = table.entry(key) {
-            return Ok(entry);
-        }
-    }
-    Err(Error::UnresolvedIdentifier(String::from(key)))
-}
-
 fn check_fn<'a>(
-    symtab: &mut [SymbolTable<'a>],
+    symtab: &mut SymbolTable<'a, Type>,
     key: &'a str,
     arguments: &[Type],
 ) -> Result<Type, Error> {
-    let entry = resolve_sym(symtab, key)?.get().clone();
+    let entry = symtab.resolve(key)?.get().clone();
     let Type::Fun { parameters, result } = entry else {
         return Err(Error::NotFn(String::from(key)));
     };
@@ -141,7 +115,7 @@ fn check_fn<'a>(
     Ok(*result)
 }
 
-fn check<'a>(ast: &mut Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Type, Error> {
+fn visit<'a>(ast: &mut Ast<'a>, symtab: &mut SymbolTable<'a, Type>) -> Result<Type, Error> {
     let expr = ast.tree.as_mut();
     traceln!("{expr}");
     let typ = match expr {
@@ -150,15 +124,15 @@ fn check<'a>(ast: &mut Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Typ
             Literal::Bool(_) => Type::Bool,
             Literal::Str(_) => unimplemented!("String literals are not supported"),
         },
-        Expression::Identifier(identifier) => resolve_sym(symtab, identifier.name)?.get().clone(),
+        Expression::Identifier(identifier) => symtab.resolve(identifier.name)?.get().clone(),
         Expression::Conditional(conditional) => {
-            let condition = check(&mut conditional.condition, symtab)?;
+            let condition = visit(&mut conditional.condition, symtab)?;
             if condition != Type::Bool {
                 return Err(Error::ConditionalCondition(condition));
             }
-            let then_typ = check(&mut conditional.then_expr, symtab)?;
+            let then_typ = visit(&mut conditional.then_expr, symtab)?;
             if let Some(else_expr) = &mut conditional.else_expr {
-                let else_typ = check(else_expr, symtab)?;
+                let else_typ = visit(else_expr, symtab)?;
                 if then_typ != else_typ {
                     return Err(Error::ConditionalBranches(then_typ, else_typ));
                 }
@@ -171,17 +145,17 @@ fn check<'a>(ast: &mut Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Typ
             let key = fn_call.function.name;
             let mut arguments = Vec::new();
             for arg in &mut fn_call.arguments {
-                arguments.push(check(arg, symtab)?);
+                arguments.push(visit(arg, symtab)?);
             }
             check_fn(symtab, key, &arguments)?
         }
         Expression::Block(block) => {
-            symtab.push(HashMap::new());
+            symtab.push();
             for expr in &mut block.expressions {
-                check(expr, symtab)?;
+                visit(expr, symtab)?;
             }
             let result = if let Some(result) = &mut block.result {
-                check(result, symtab)?
+                visit(result, symtab)?
             } else {
                 Type::Unit
             };
@@ -190,7 +164,7 @@ fn check<'a>(ast: &mut Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Typ
         }
         Expression::Var(var) => {
             let key = var.id.name;
-            let typ = check(&mut var.init, symtab)?;
+            let typ = visit(&mut var.init, symtab)?;
             if let Some(typed) = &var.typed {
                 if typ != *typed {
                     return Err(Error::AssignWrongType(
@@ -200,7 +174,7 @@ fn check<'a>(ast: &mut Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Typ
                     ));
                 }
             }
-            if symtab.last_mut().unwrap().insert(key, typ).is_some() {
+            if symtab.insert(key, typ).is_some() {
                 return Err(Error::Redefinition(String::from(key)));
             }
             Type::Unit
@@ -212,15 +186,15 @@ fn check<'a>(ast: &mut Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Typ
                     Expression::Identifier(identifier) => identifier.name,
                     expr => return Err(Error::AssignWrongExpr(format!("{}", expr))),
                 };
-                let lhs = resolve_sym(symtab, key)?.get().clone();
-                let rhs = check(&mut binary_op.right, symtab)?;
+                let lhs = symtab.resolve(key)?.get().clone();
+                let rhs = visit(&mut binary_op.right, symtab)?;
                 if lhs != rhs {
                     return Err(Error::AssignWrongType(String::from(key), lhs, rhs));
                 }
                 Type::Unit
             } else {
-                let lhs = check(&mut binary_op.left, symtab)?;
-                let rhs = check(&mut binary_op.right, symtab)?;
+                let lhs = visit(&mut binary_op.left, symtab)?;
+                let rhs = visit(&mut binary_op.right, symtab)?;
                 match (binary_op.op, &[lhs, rhs]) {
                     (op @ (Op::Eq | Op::Ne), [a, b]) => {
                         if a == b {
@@ -253,7 +227,7 @@ fn check<'a>(ast: &mut Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Typ
                 Op::Not => "unary_not",
                 op => unreachable!("Ast has {op:#?} in UnaryOp"),
             };
-            let arguments = &[check(&mut unary_op.right, symtab)?];
+            let arguments = &[visit(&mut unary_op.right, symtab)?];
             check_fn(symtab, key, arguments)?
         }
         Expression::While(_) => Type::Unit,
@@ -262,27 +236,10 @@ fn check<'a>(ast: &mut Ast<'a>, symtab: &mut Vec<SymbolTable<'a>>) -> Result<Typ
     Ok(typ)
 }
 
-pub fn typecheck(ast: &mut Ast<'_>) -> Result<Type, Error> {
+pub fn typecheck<'a>(ast: &mut Ast<'a>, root_types: &[(&'a str, Type)]) -> Result<Type, Error> {
     start_trace!("Type checker");
-    let mut symtab = vec![HashMap::from([
-        ("print_int", fun!((Type::Int) => Type::Unit)),
-        ("print_bool", fun!((Type::Bool) => Type::Unit)),
-        ("read_int", fun!(() => Type::Int)),
-        ("binary_add", fun!((Type::Int, Type::Int) => Type::Int)),
-        ("binary_sub", fun!((Type::Int, Type::Int) => Type::Int)),
-        ("unary_sub", fun!((Type::Int) => Type::Int)),
-        ("binary_mul", fun!((Type::Int, Type::Int) => Type::Int)),
-        ("binary_div", fun!((Type::Int, Type::Int) => Type::Int)),
-        ("binary_rem", fun!((Type::Int, Type::Int) => Type::Int)),
-        ("binary_lt", fun!((Type::Int, Type::Int) => Type::Bool)),
-        ("binary_leq", fun!((Type::Int, Type::Int) => Type::Bool)),
-        ("binary_gt", fun!((Type::Int, Type::Int) => Type::Bool)),
-        ("binary_geq", fun!((Type::Int, Type::Int) => Type::Bool)),
-        ("binary_and", fun!((Type::Bool, Type::Bool) => Type::Bool)),
-        ("binary_or", fun!((Type::Bool, Type::Bool) => Type::Bool)),
-        ("unary_not", fun!((Type::Bool) => Type::Bool)),
-    ])];
-    let res = check(ast, &mut symtab);
+    let mut symtab = SymbolTable::new(root_types);
+    let res = visit(ast, &mut symtab);
     end_trace!();
     res
 }
