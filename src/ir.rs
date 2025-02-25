@@ -1,52 +1,55 @@
-use crate::{SymbolTable, Type, ast::Ast};
-use std::{borrow::Cow, fmt::Display};
+use crate::{
+    Location, SymbolTable, Type,
+    ast::{Ast, Expression, Int, Literal},
+};
+use std::{collections::HashMap, fmt::Display};
 
-type Var<'a> = Cow<'a, str>;
-type Label<'a> = Cow<'a, str>;
+type Var = String;
+type Label = String;
 
 #[derive(Debug)]
-pub enum Instruction<'a> {
+pub enum Op {
     LoadBoolConst {
         value: bool,
-        dest: Var<'a>,
+        dest: Var,
     },
     LoadIntConst {
-        value: bool,
-        dest: Var<'a>,
+        value: Int,
+        dest: Var,
     },
     Copy {
-        source: Var<'a>,
-        dest: Var<'a>,
+        source: Var,
+        dest: Var,
     },
     Call {
-        fun: Var<'a>,
-        args: Vec<Var<'a>>,
-        dest: Var<'a>,
+        fun: Var,
+        args: Vec<Var>,
+        dest: Var,
     },
     Jump {
-        label: Label<'a>,
+        label: Label,
     },
     CondJump {
-        cond: Var<'a>,
-        then_label: Label<'a>,
-        else_label: Label<'a>,
+        cond: Var,
+        then_label: Label,
+        else_label: Label,
     },
-    Label(Label<'a>),
+    Label(Label),
 }
 
-impl Display for Instruction<'_> {
+impl Display for Op {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Instruction::LoadBoolConst { value, dest } => {
+            Op::LoadBoolConst { value, dest } => {
                 write!(f, "LoadBoolConst({value}, {dest})")
             }
-            Instruction::LoadIntConst { value, dest } => {
+            Op::LoadIntConst { value, dest } => {
                 write!(f, "LoadIntConst({value}, {dest})")
             }
-            Instruction::Copy { source, dest } => {
+            Op::Copy { source, dest } => {
                 write!(f, "Copy({source}, {dest})")
             }
-            Instruction::Call { fun, args, dest } => {
+            Op::Call { fun, args, dest } => {
                 write!(f, "Call({fun}, [")?;
                 if let [a0, rest @ ..] = args.as_slice() {
                     write!(f, "{a0}")?;
@@ -56,28 +59,87 @@ impl Display for Instruction<'_> {
                 }
                 write!(f, "], {dest})")
             }
-            Instruction::Jump { label } => {
+            Op::Jump { label } => {
                 write!(f, "Jump({label})")
             }
-            Instruction::CondJump {
+            Op::CondJump {
                 cond,
                 then_label,
                 else_label,
             } => {
                 write!(f, "CondJump({cond}, {then_label}, {else_label})")
             }
-            Instruction::Label(label) => {
+            Op::Label(label) => {
                 write!(f, "{label}")
             }
         }
     }
 }
 
-pub fn generate_ir<'a>(ast: &Ast<'a>, root_types: &[(&'a str, Type)]) -> Vec<Instruction<'a>> {
-    let root_vars: Vec<(&str, Var)> = root_types
-        .iter()
-        .map(|(k, _)| (*k, Var::from(*k)))
-        .collect();
-    let mut symtab = SymbolTable::from(root_vars);
+pub struct Instruction {
+    location: Location,
+    op: Op,
+}
+
+struct Generator<'a> {
+    symtab: SymbolTable<'a, Var>,
+    ins: Vec<Instruction>,
+    var_types: HashMap<Var, Type>,
+}
+
+impl<'a> Generator<'a> {
+    const UNIT: &'static str = "unit";
+
+    pub fn new(root_types: &[(&'a str, Type)]) -> Self {
+        let root_vars: Vec<(&str, Var)> = root_types
+            .iter()
+            .map(|(k, _)| (*k, Var::from(*k)))
+            .collect();
+        let symtab = SymbolTable::from(root_vars);
+
+        Self {
+            symtab,
+            ins: Vec::new(),
+            var_types: HashMap::from([(Self::UNIT.into(), Type::Unit)]),
+        }
+    }
+
+    fn new_var(&mut self, ty: Type) -> Var {
+        let var = format!("x{}", self.var_types.len());
+        self.var_types.insert(var.clone(), ty);
+        var
+    }
+
+    fn visit(&mut self, ast: &Ast<'a>) -> Var {
+        let location = ast.location.clone();
+        match ast.tree.as_ref() {
+            Expression::Literal(literal) => match literal {
+                Literal::Int(value) => {
+                    let var = self.new_var(Type::Int);
+                    self.ins.push(Instruction {
+                        location,
+                        op: Op::LoadIntConst {
+                            value: *value,
+                            dest: var.clone(),
+                        },
+                    });
+                    var
+                }
+                Literal::Bool(_) => todo!(),
+                Literal::Str(_) => todo!(),
+            },
+            Expression::Identifier(identifier) => todo!(),
+            Expression::Conditional(conditional) => todo!(),
+            Expression::FnCall(fn_call) => todo!(),
+            Expression::Block(block) => todo!(),
+            Expression::Var(var) => todo!(),
+            Expression::BinaryOp(binary_op) => todo!(),
+            Expression::UnaryOp(unary_op) => todo!(),
+            Expression::While(_) => todo!(),
+        }
+    }
+}
+
+pub fn generate_ir<'a>(ast: &Ast<'a>, root_types: &[(&'a str, Type)]) -> Vec<Instruction> {
     todo!()
 }
