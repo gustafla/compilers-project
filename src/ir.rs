@@ -116,33 +116,22 @@ impl<'a> Generator<'a> {
     }
 
     pub fn visit(&mut self, ast: &Ast<'a>) -> Result<Var, Error> {
-        let location = ast.location.clone();
+        let location = &ast.location;
+        let ty = ast.ty.as_ref().expect("AST should have been type checked");
         match ast.tree.as_ref() {
-            Expression::Literal(literal) => match literal {
-                Literal::Int(value) => {
-                    let var = self.new_var(Type::Int);
-                    self.ins.push(Instruction {
-                        location,
-                        op: Op::LoadIntConst {
-                            value: *value,
-                            dest: var.clone(),
-                        },
-                    });
-                    Ok(var)
+            Expression::Literal(literal) => {
+                let var = self.new_var(&Type::Int);
+                match literal {
+                    Literal::Int(value) => {
+                        self.emit_load_int_const(location, *value, var.clone());
+                    }
+                    Literal::Bool(value) => {
+                        self.emit_load_bool_const(location, *value, var.clone());
+                    }
+                    Literal::Str(_) => unimplemented!("String literals are not supported"),
                 }
-                Literal::Bool(value) => {
-                    let var = self.new_var(Type::Bool);
-                    self.ins.push(Instruction {
-                        location,
-                        op: Op::LoadBoolConst {
-                            value: *value,
-                            dest: var.clone(),
-                        },
-                    });
-                    Ok(var)
-                }
-                Literal::Str(_) => unimplemented!("String literals are not supported"),
-            },
+                Ok(var)
+            }
             Expression::Identifier(identifier) => {
                 Ok(self.symtab.resolve(identifier.name)?.get().clone())
             }
@@ -153,8 +142,20 @@ impl<'a> Generator<'a> {
             Expression::BinaryOp(binary_op) => {
                 let var_op = self
                     .symtab
-                    .resolve(binary_op.op.function_name(Ary::Binary))?;
-                todo!()
+                    .resolve(binary_op.op.function_name(Ary::Binary))?
+                    .get()
+                    .clone();
+                // TODO: Special cases for =, and and or
+                let var_left = self.visit(&binary_op.left)?;
+                let var_right = self.visit(&binary_op.right)?;
+                let var_result = self.new_var(ty);
+                self.emit_call(
+                    location,
+                    var_op,
+                    vec![var_left, var_right],
+                    var_result.clone(),
+                );
+                Ok(var_result)
             }
             Expression::UnaryOp(unary_op) => todo!(),
             Expression::While(_) => todo!(),
@@ -168,9 +169,9 @@ impl<'a> Generator<'a> {
         }
     }
 
-    pub fn new_var(&mut self, ty: Type) -> Var {
+    pub fn new_var(&mut self, ty: &Type) -> Var {
         let var = format!("x{}", self.var_types.len());
-        self.var_types.insert(var.clone(), ty);
+        self.var_types.insert(var.clone(), ty.clone());
         var
     }
 
