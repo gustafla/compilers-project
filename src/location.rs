@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::{ops::Range, sync::LazyLock};
+use std::{error::Error, fmt::Display, ops::Range, sync::LazyLock};
 
 #[allow(
     clippy::unwrap_used,
@@ -42,5 +42,24 @@ impl From<Range<usize>> for Location {
 impl Default for Location {
     fn default() -> Self {
         (0..0).into()
+    }
+}
+
+#[derive(Debug)]
+pub struct ErrorLocation<E: Error + 'static> {
+    line: u32,
+    column: u32,
+    error: E,
+}
+
+impl<E: Error> Display for ErrorLocation<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "At line {}, column {}", self.line, self.column)
+    }
+}
+
+impl<E: Error> Error for ErrorLocation<E> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.error)
     }
 }
