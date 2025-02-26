@@ -1,7 +1,4 @@
-use std::{
-    borrow::Cow,
-    collections::hash_map::{Entry, HashMap, OccupiedEntry},
-};
+use std::collections::hash_map::{Entry, HashMap, OccupiedEntry};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -9,17 +6,14 @@ use thiserror::Error;
 pub struct Error(String);
 
 #[doc(alias = "SymTab")]
-pub struct SymbolTable<'a, T>(Vec<HashMap<Cow<'a, str>, T>>);
+pub struct SymbolTable<'a, T>(Vec<HashMap<&'a str, T>>);
 
-impl<'a, K, T, I> From<I> for SymbolTable<'a, T>
+impl<'a, T, I> From<I> for SymbolTable<'a, T>
 where
-    I: IntoIterator<Item = (K, T)>,
-    Cow<'a, str>: From<K>,
+    I: IntoIterator<Item = (&'a str, T)>,
 {
     fn from(value: I) -> Self {
-        Self(vec![
-            value.into_iter().map(|(k, v)| (Cow::from(k), v)).collect(),
-        ])
+        Self(vec![value.into_iter().collect()])
     }
 }
 
@@ -28,9 +22,9 @@ impl<'a, T> SymbolTable<'a, T> {
         Self(vec![HashMap::new()])
     }
 
-    pub fn resolve(&mut self, key: &'a str) -> Result<OccupiedEntry<'_, Cow<'a, str>, T>, Error> {
+    pub fn resolve(&mut self, key: &'a str) -> Result<OccupiedEntry<'_, &'a str, T>, Error> {
         for table in self.0.iter_mut().rev() {
-            if let Entry::Occupied(entry) = table.entry(key.into()) {
+            if let Entry::Occupied(entry) = table.entry(key) {
                 return Ok(entry);
             }
         }
@@ -49,7 +43,7 @@ impl<'a, T> SymbolTable<'a, T> {
     }
 
     pub fn insert(&mut self, key: &'a str, value: T) -> Option<T> {
-        self.0.last_mut().unwrap().insert(key.into(), value)
+        self.0.last_mut().unwrap().insert(key, value)
     }
 }
 
