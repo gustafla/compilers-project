@@ -14,6 +14,8 @@ pub enum Error {
     ConditionalBranches(Type, Type),
     #[error("Conditional expression condition has an incompatible type `if {0} then ..`")]
     ConditionalCondition(Type),
+    #[error("While loop condition has an incompatible type `while {0} do ..`")]
+    WhileLoopCondition(Type),
     #[error("Binary expression operands have incompatible types `{0} {1} {2}`")]
     BinaryExpr(Type, Operator, Type),
     #[error("Cannot call {0:?}, not a function")]
@@ -211,7 +213,14 @@ fn visit<'a>(ast: &mut Ast<'a>, symtab: &mut SymbolTable<'a, Type>) -> Result<Ty
             let arguments = &[visit(&mut unary_op.right, symtab)?];
             check_fn(symtab, unary_op.op.function_name(Ary::Unary), arguments)?
         }
-        Expression::While(_) => Type::Unit,
+        Expression::While(while_loop) => {
+            let condition = visit(&mut while_loop.condition, symtab)?;
+            if condition != Type::Bool {
+                return Err(Error::WhileLoopCondition(condition));
+            }
+            visit(&mut while_loop.do_expr, symtab);
+            Type::Unit
+        }
     };
     ast.ty = Some(typ.clone());
     Ok(typ)
