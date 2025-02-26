@@ -17,6 +17,8 @@ type Label = String;
 
 #[derive(Debug)]
 pub enum Op {
+    Label(Label),
+    Nop,
     LoadBoolConst {
         value: bool,
         dest: Var,
@@ -42,12 +44,20 @@ pub enum Op {
         then_label: Label,
         else_label: Label,
     },
-    Label(Label),
 }
 
 impl Display for Op {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Indent, but not labels and nops
         match self {
+            Op::Label(_) | Op::Nop => {}
+            _ => write!(f, "    ")?,
+        };
+        match self {
+            Op::Label(label) => {
+                write!(f, "{label}:")
+            }
+            Op::Nop => Ok(()),
             Op::LoadBoolConst { value, dest } => {
                 write!(f, "LoadBoolConst({value}, {dest})")
             }
@@ -76,9 +86,6 @@ impl Display for Op {
                 else_label,
             } => {
                 write!(f, "CondJump({cond}, {then_label}, {else_label})")
-            }
-            Op::Label(label) => {
-                write!(f, "{label}")
             }
         }
     }
@@ -115,7 +122,10 @@ impl<'a> Generator<'a> {
             var: 0,
             label: 0,
             symtab,
-            ins: Vec::new(),
+            ins: vec![Instruction {
+                location: Location::default(),
+                op: Op::Label(Label::from("start")),
+            }],
             var_types: HashMap::from([(Self::UNIT.into(), Type::Unit)]),
         }
     }
@@ -143,18 +153,51 @@ impl<'a> Generator<'a> {
             Expression::Conditional(conditional) => {
                 let then_label = self.new_label();
                 let else_label = self.new_label();
+
+                // Emit the main CondJump
                 let var_cond = self.visit(&conditional.condition)?;
                 self.emit_cond_jump(location, var_cond, then_label.clone(), else_label.clone());
+
+                // Emit then-branch
                 self.emit_label(location, then_label);
-                self.visit(&conditional.then_expr)?;
-                self.emit_label(location, else_label);
+                let var_result = self.visit(&conditional.then_expr)?;
+
                 if let Some(else_expr) = &conditional.else_expr {
-                    self.visit(else_expr)?;
-                    // TODO: store to variable and return that?
+                    // Copy result to var in both branches of the IR
+                    let var_output = self.new_var(ty);
+                    self.emit_copy(location, var_result, var_output.clone());
+
+                    // Emit jump that ends the then-branch
+                    let end_label = self.new_label();
+                    self.emit_jump(location, end_label.clone());
+
+                    // Emit label that starts the else branch
+                    self.emit_label(location, else_label);
+                    let var_result = self.visit(else_expr)?;
+
+                    // Copy result to var in both branches of the IR
+                    self.emit_copy(location, var_result, var_output.clone());
+
+                    // Emit end label for the
+                    self.emit_label(location, end_label);
+
+                    Ok(var_output)
+                } else {
+                    // Use else-label as an end label as nothing gets emitted after it
+                    self.emit_label(location, else_label);
+                    Ok(Self::UNIT.into())
                 }
-                Ok(Self::UNIT.into())
             }
-            Expression::FnCall(fn_call) => todo!(),
+            Expression::FnCall(fn_call) => {
+                let fun = self.symtab.resolve(fn_call.function.name)?.get().clone();
+                let mut args = Vec::new();
+                for arg in &fn_call.arguments {
+                    args.push(self.visit(arg)?);
+                }
+                let dest = self.new_var(ty);
+                self.emit_call(location, fun, args, dest.clone());
+                Ok(dest)
+            }
             Expression::Block(block) => {
                 self.symtab.push();
                 for expr in &block.expressions {
@@ -212,39 +255,50 @@ impl<'a> Generator<'a> {
         label
     }
 
+    pub fn emit_label(&mut self, location: &Location, label: Var) {
+        self.ins.push(Instruction {
+            location: location.clone(),
+            op: Op::Nop,
+        });
+        self.ins.push(Instruction {
+            location: location.clone(),
+            op: Op::Label(label),
+        });
+    }
+
     pub fn emit_load_int_const(&mut self, location: &Location, value: Int, dest: Var) {
         self.ins.push(Instruction {
             location: location.clone(),
             op: Op::LoadIntConst { value, dest },
-        })
+        });
     }
 
     pub fn emit_load_bool_const(&mut self, location: &Location, value: bool, dest: Var) {
         self.ins.push(Instruction {
             location: location.clone(),
             op: Op::LoadBoolConst { value, dest },
-        })
+        });
     }
 
     pub fn emit_copy(&mut self, location: &Location, source: Var, dest: Var) {
         self.ins.push(Instruction {
             location: location.clone(),
             op: Op::Copy { source, dest },
-        })
+        });
     }
 
     pub fn emit_call(&mut self, location: &Location, fun: Var, args: Vec<Var>, dest: Var) {
         self.ins.push(Instruction {
             location: location.clone(),
             op: Op::Call { fun, args, dest },
-        })
+        });
     }
 
     pub fn emit_jump(&mut self, location: &Location, label: Var) {
         self.ins.push(Instruction {
             location: location.clone(),
             op: Op::Jump { label },
-        })
+        });
     }
 
     pub fn emit_cond_jump(
@@ -261,13 +315,7 @@ impl<'a> Generator<'a> {
                 then_label,
                 else_label,
             },
-        })
-    }
-    pub fn emit_label(&mut self, location: &Location, label: Var) {
-        self.ins.push(Instruction {
-            location: location.clone(),
-            op: Op::Label(label),
-        })
+        });
     }
 }
 
