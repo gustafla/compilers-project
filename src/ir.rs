@@ -1,6 +1,6 @@
 use crate::{
     Location, SymbolTable, Type,
-    ast::{Ast, Expression, Int, Literal},
+    ast::{Ast, Expression, Int, Literal, op::Ary},
     symtab,
 };
 use std::{collections::HashMap, fmt::Display};
@@ -151,8 +151,11 @@ impl<'a> Generator<'a> {
             Expression::Block(block) => todo!(),
             Expression::Var(var) => todo!(),
             Expression::BinaryOp(binary_op) => {
-                let var_op = self.symtab.resolve()
-            },
+                let var_op = self
+                    .symtab
+                    .resolve(binary_op.op.function_name(Ary::Binary))?;
+                todo!()
+            }
             Expression::UnaryOp(unary_op) => todo!(),
             Expression::While(_) => todo!(),
         }

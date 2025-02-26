@@ -1,6 +1,6 @@
 use crate::{
     SymbolTable,
-    ast::{Ast, Expression, Literal, Op},
+    ast::{Ast, Expression, Literal, Operator, op::Ary},
     trace::{end_trace, start_trace, traceln},
 };
 use std::{fmt::Display, str::FromStr};
@@ -15,7 +15,7 @@ pub enum Error {
     #[error("Conditional expression condition has an incompatible type `if {0} then ..`")]
     ConditionalCondition(Type),
     #[error("Binary expression operands have incompatible types `{0} {1} {2}`")]
-    BinaryExpr(Type, Op, Type),
+    BinaryExpr(Type, Operator, Type),
     #[error("Cannot call {0:?}, not a function")]
     NotFn(String),
     #[error("In call to {0:?}: wrong number of arguments, has {1} but requires {2}")]
@@ -181,7 +181,7 @@ fn visit<'a>(ast: &mut Ast<'a>, symtab: &mut SymbolTable<'a, Type>) -> Result<Ty
         }
         Expression::BinaryOp(binary_op) => {
             // Special case: assignment
-            if binary_op.op == Op::Assign {
+            if binary_op.op == Operator::Assign {
                 let key = match binary_op.left.tree.as_ref() {
                     Expression::Identifier(identifier) => identifier.name,
                     expr => return Err(Error::AssignWrongExpr(format!("{}", expr))),
@@ -196,39 +196,20 @@ fn visit<'a>(ast: &mut Ast<'a>, symtab: &mut SymbolTable<'a, Type>) -> Result<Ty
                 let lhs = visit(&mut binary_op.left, symtab)?;
                 let rhs = visit(&mut binary_op.right, symtab)?;
                 match (binary_op.op, &[lhs, rhs]) {
-                    (op @ (Op::Eq | Op::Ne), [a, b]) => {
+                    (op @ (Operator::Eq | Operator::Ne), [a, b]) => {
                         if a == b {
                             Type::Bool
                         } else {
                             return Err(Error::BinaryExpr(a.clone(), op, b.clone()));
                         }
                     }
-                    (Op::Add, args) => check_fn(symtab, "binary_add", args)?,
-                    (Op::Sub, args) => check_fn(symtab, "binary_sub", args)?,
-                    (Op::Mul, args) => check_fn(symtab, "binary_mul", args)?,
-                    (Op::Div, args) => check_fn(symtab, "binary_div", args)?,
-                    (Op::Rem, args) => check_fn(symtab, "binary_rem", args)?,
-                    (Op::Leq, args) => check_fn(symtab, "binary_leq", args)?,
-                    (Op::Lt, args) => check_fn(symtab, "binary_lt", args)?,
-                    (Op::Geq, args) => check_fn(symtab, "binary_geq", args)?,
-                    (Op::Gt, args) => check_fn(symtab, "binary_gt", args)?,
-                    (Op::And, args) => check_fn(symtab, "binary_and", args)?,
-                    (Op::Or, args) => check_fn(symtab, "binary_or", args)?,
-                    (op @ Op::Not, _) => unreachable!("Ast has {op} in BinaryOp"),
-                    (op @ Op::Assign, _) => {
-                        unreachable!("{op:#?} should have been handled in a special case")
-                    }
+                    (op, args) => check_fn(symtab, op.function_name(Ary::Binary), args)?,
                 }
             }
         }
         Expression::UnaryOp(unary_op) => {
-            let key = match unary_op.op {
-                Op::Sub => "unary_sub",
-                Op::Not => "unary_not",
-                op => unreachable!("Ast has {op:#?} in UnaryOp"),
-            };
             let arguments = &[visit(&mut unary_op.right, symtab)?];
-            check_fn(symtab, key, arguments)?
+            check_fn(symtab, unary_op.op.function_name(Ary::Unary), arguments)?
         }
         Expression::While(_) => Type::Unit,
     };

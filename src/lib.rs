@@ -8,6 +8,7 @@ pub mod tokenizer;
 mod trace;
 mod typecheck;
 
+use ast::{Operator, op::Ary};
 pub use config::Config;
 pub use location::Location;
 pub use symtab::SymbolTable;
@@ -51,19 +52,58 @@ pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
         ("print_int", fun!((Type::Int) => Type::Unit)),
         ("print_bool", fun!((Type::Bool) => Type::Unit)),
         ("read_int", fun!(() => Type::Int)),
-        ("binary_add", fun!((Type::Int, Type::Int) => Type::Int)),
-        ("binary_sub", fun!((Type::Int, Type::Int) => Type::Int)),
-        ("unary_sub", fun!((Type::Int) => Type::Int)),
-        ("binary_mul", fun!((Type::Int, Type::Int) => Type::Int)),
-        ("binary_div", fun!((Type::Int, Type::Int) => Type::Int)),
-        ("binary_rem", fun!((Type::Int, Type::Int) => Type::Int)),
-        ("binary_lt", fun!((Type::Int, Type::Int) => Type::Bool)),
-        ("binary_leq", fun!((Type::Int, Type::Int) => Type::Bool)),
-        ("binary_gt", fun!((Type::Int, Type::Int) => Type::Bool)),
-        ("binary_geq", fun!((Type::Int, Type::Int) => Type::Bool)),
-        ("binary_and", fun!((Type::Bool, Type::Bool) => Type::Bool)),
-        ("binary_or", fun!((Type::Bool, Type::Bool) => Type::Bool)),
-        ("unary_not", fun!((Type::Bool) => Type::Bool)),
+        (
+            Operator::Add.function_name(Ary::Binary),
+            fun!((Type::Int, Type::Int) => Type::Int),
+        ),
+        (
+            Operator::Sub.function_name(Ary::Binary),
+            fun!((Type::Int, Type::Int) => Type::Int),
+        ),
+        (
+            Operator::Sub.function_name(Ary::Unary),
+            fun!((Type::Int) => Type::Int),
+        ),
+        (
+            Operator::Mul.function_name(Ary::Binary),
+            fun!((Type::Int, Type::Int) => Type::Int),
+        ),
+        (
+            Operator::Div.function_name(Ary::Binary),
+            fun!((Type::Int, Type::Int) => Type::Int),
+        ),
+        (
+            Operator::Rem.function_name(Ary::Binary),
+            fun!((Type::Int, Type::Int) => Type::Int),
+        ),
+        (
+            Operator::Lt.function_name(Ary::Binary),
+            fun!((Type::Int, Type::Int) => Type::Bool),
+        ),
+        (
+            Operator::Leq.function_name(Ary::Binary),
+            fun!((Type::Int, Type::Int) => Type::Bool),
+        ),
+        (
+            Operator::Gt.function_name(Ary::Binary),
+            fun!((Type::Int, Type::Int) => Type::Bool),
+        ),
+        (
+            Operator::Geq.function_name(Ary::Binary),
+            fun!((Type::Int, Type::Int) => Type::Bool),
+        ),
+        (
+            Operator::And.function_name(Ary::Binary),
+            fun!((Type::Bool, Type::Bool) => Type::Bool),
+        ),
+        (
+            Operator::Or.function_name(Ary::Binary),
+            fun!((Type::Bool, Type::Bool) => Type::Bool),
+        ),
+        (
+            Operator::Not.function_name(Ary::Unary),
+            fun!((Type::Bool) => Type::Bool),
+        ),
     ];
 
     typecheck::typecheck(&mut ast, root_types)?;

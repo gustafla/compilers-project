@@ -3,7 +3,7 @@ mod tests;
 use crate::{
     Location, Type,
     ast::{
-        Ast, BinaryOp, Block, Conditional, Expression, FnCall, Identifier, Int, Literal, Op,
+        Ast, BinaryOp, Block, Conditional, Expression, FnCall, Identifier, Int, Literal, Operator,
         UnaryOp, Var, While, macros::ast,
     },
     config,
@@ -48,10 +48,10 @@ pub enum Error {
     },
 }
 
-fn parse_op(tokens: &Tokens<'_>, at: &mut usize) -> Result<Op, Error> {
+fn parse_op(tokens: &Tokens<'_>, at: &mut usize) -> Result<Operator, Error> {
     let (_, fragment) = tokens.peek(at);
     traceln!("parse_op, token = {fragment:?}");
-    let op = match fragment.parse::<Op>() {
+    let op = match fragment.parse::<Operator>() {
         Ok(op) => op,
         Err(..) => {
             return Err(Error::ExpectedOneOf {
@@ -339,7 +339,7 @@ fn parse_var<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, 
 
     // Op::Assign
     match parse_op(tokens, at) {
-        Ok(Op::Assign) => {}
+        Ok(Operator::Assign) => {}
         Ok(op) => {
             return Some(Err(Error::ExpectedOneOf {
                 of: vec!["=".to_owned()],
@@ -451,7 +451,7 @@ fn parse_assignment_expr_right<'a, 'b>(
 
     while let Some(ast) = terms.pop() {
         right = ast! {
-            (ast.location.start()..right.location.end()).into() => Expression::BinaryOp(BinaryOp { left: ast, op: Op::Assign, right, })
+            (ast.location.start()..right.location.end()).into() => Expression::BinaryOp(BinaryOp { left: ast, op: Operator::Assign, right, })
         };
     }
 

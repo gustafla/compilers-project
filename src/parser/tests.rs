@@ -80,7 +80,7 @@ fn basic() {
     let code = "1 + 1";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
-    assert_eq!(expression, blk! {,op! {int!(1), Op::Add, int!(1)}});
+    assert_eq!(expression, blk! {,op! {int!(1), Operator::Add, int!(1)}});
 }
 
 #[test]
@@ -102,10 +102,10 @@ fn precedence_basic() {
                 op! {
                 op! {
                     int!(1),
-                    Op::Add,
+                    Operator::Add,
                     int!(2),
                 },
-                Op::Add,
+                Operator::Add,
                 int!(3),
             }
         }
@@ -119,10 +119,10 @@ fn precedence_basic() {
         blk! {,
             op! {
                 int!(1),
-                Op::Add,
+                Operator::Add,
                 op! {
                     int!(2),
-                    Op::Mul,
+                    Operator::Mul,
                     int!(3),
                 },
             }
@@ -140,10 +140,10 @@ fn paren() {
         blk! {,
                 op! {
                 int!(1),
-                Op::Add,
+                Operator::Add,
                 op! {
                     int!(2),
-                    Op::Add,
+                    Operator::Add,
                     int!(3),
                 },
             }
@@ -161,10 +161,10 @@ fn identifiers() {
         blk! {,
                 op! {
                 id!("a"),
-                Op::Add,
+                Operator::Add,
                 op! {
                     id!("b"),
-                    Op::Mul,
+                    Operator::Mul,
                     id!("c"),
                 },
             }
@@ -184,7 +184,7 @@ fn conditional() {
                 id!("a"),
                 op! {
                     int!(1),
-                    Op::Add,
+                    Operator::Add,
                     int!(1)
                 }
             }
@@ -202,7 +202,7 @@ fn binary_op_with_conditional() {
         blk! {,
                 op! {
                 int!(1),
-                Op::Add,
+                Operator::Add,
                 con! {
                     tru!(),
                     int!(2),
@@ -251,7 +251,7 @@ fn fn_call() {
         blk! {,
                 op! {
                 int!(5),
-                Op::Sub,
+                Operator::Sub,
                 fun!("add", int!(1), int!(1)),
             }
         }
@@ -287,10 +287,10 @@ fn assignment() {
         blk! {,
                 op! {
                 id!("a"),
-                Op::Assign,
+                Operator::Assign,
                 op! {
                     id!("b"),
-                    Op::Assign,
+                    Operator::Assign,
                     id!("c"),
                 },
             }
@@ -309,25 +309,25 @@ fn complex() {
                 con! {
                 op! {
                     tru!(),
-                    Op::Or,
+                    Operator::Or,
                     op! {
                         fal!(),
-                        Op::And,
+                        Operator::And,
                         id!("foo"),
                     },
                 },
                 op! {
                     id!("a"),
-                    Op::Assign,
+                    Operator::Assign,
                     op! {
                         id!("b"),
-                        Op::Assign,
+                        Operator::Assign,
                         op! {
                             int!(1),
-                            Op::Add,
+                            Operator::Add,
                             op! {
                                 int!(2),
-                                Op::Mul,
+                                Operator::Mul,
                                 fun!("sqrt", int!(2)),
                             }
                         }
@@ -347,9 +347,9 @@ fn unary() {
         expression,
         blk! {,
                 con! {
-                op!{Op::Not, id!("foo")},
-                op!{Op::Sub, int!(1)},
-                op!{Op::Sub, int!(2)}
+                op!{Operator::Not, id!("foo")},
+                op!{Operator::Sub, int!(1)},
+                op!{Operator::Sub, int!(2)}
             }
         }
     )
@@ -364,9 +364,9 @@ fn nested_unary() {
         expression,
         blk! {,
                 con! {
-                op!{Op::Not, op!{Op::Not, op!{Op::Not, op!{Op::Not, id!("foo")}}}},
-                op!{Op::Sub, op!{Op::Sub, int!(1)}},
-                op!{Op::Sub, op!{Op::Sub, op!{Op::Sub, op!{Op::Sub, op!{Op::Sub, int!(2)}}}}},
+                op!{Operator::Not, op!{Operator::Not, op!{Operator::Not, op!{Operator::Not, id!("foo")}}}},
+                op!{Operator::Sub, op!{Operator::Sub, int!(1)}},
+                op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, int!(2)}}}}},
             }
         }
     );
@@ -380,61 +380,61 @@ fn precedence_complex() {
     assert_eq!(
         expression,
         blk! {,
-                op! {Op::Sub,
+                op! {Operator::Sub,
                 con! {
                     tru!{},
                     op! {
                         id!("a"),
-                        Op::Assign,
+                        Operator::Assign,
                         op! {
                             op! {
                                 int!(1),
-                                Op::Or,
+                                Operator::Or,
                                 op! {
                                     int!(1),
-                                    Op::And,
+                                    Operator::And,
                                     op! {
                                         op! {
                                             int!(1),
-                                            Op::Eq,
+                                            Operator::Eq,
                                             int!(1),
                                         },
-                                        Op::Ne,
+                                        Operator::Ne,
                                         op ! {
                                             op! {
                                                 op! {
                                                     op! {
                                                         int!(1),
-                                                        Op::Lt,
+                                                        Operator::Lt,
                                                         int!(1),
                                                     },
-                                                    Op::Leq,
+                                                    Operator::Leq,
                                                     int!(1),
                                                 },
-                                                Op::Gt,
+                                                Operator::Gt,
                                                 int!(1),
                                             },
-                                            Op::Geq,
+                                            Operator::Geq,
                                             op! {
                                                 op! {
                                                     int!(1),
-                                                    Op::Add,
+                                                    Operator::Add,
                                                     int!(1),
                                                 },
-                                                Op::Sub,
+                                                Operator::Sub,
                                                 op! {
                                                     op! {
                                                         op! {
                                                             int!(1),
-                                                            Op::Mul,
+                                                            Operator::Mul,
                                                             int!(1),
                                                         },
-                                                        Op::Div,
+                                                        Operator::Div,
                                                         int!(1),
                                                     },
-                                                    Op::Rem,
+                                                    Operator::Rem,
                                                     op! {
-                                                        Op::Sub,
+                                                        Operator::Sub,
                                                         int!(1),
                                                     }
                                                 }
@@ -443,7 +443,7 @@ fn precedence_complex() {
                                     }
                                 },
                             },
-                            Op::Assign,
+                            Operator::Assign,
                             id!("x")
                         }
                     },
@@ -525,7 +525,7 @@ fn var() {
                     fun!("exit", int!(0));
                 },
                 blk! {
-                    var!("retval" = op!(id!("errno"), Op::Add, int!(1)))
+                    var!("retval" = op!(id!("errno"), Operator::Add, int!(1)))
                     , fun!("exit", id!("retval"))
                 }
             }
@@ -687,7 +687,7 @@ fn omitted_semicolon_case7() {
         blk! {,
                 op! {
                 id!("x"),
-                Op::Assign,
+                Operator::Assign,
                 blk!{
                     blk!{,fun!("f", id!("a"))},
                     blk!{,id!("b")}
@@ -746,7 +746,7 @@ fn root_level_block2() {
     assert_eq!(
         expression,
         blk! {
-            var!("x" = blk!{,op!{int!(1), Op::Add, int!(1)}});
+            var!("x" = blk!{,op!{int!(1), Operator::Add, int!(1)}});
             con!{
                 tru!(),
                 blk!{, id!("a")},
@@ -771,10 +771,10 @@ fn while_loop() {
                 blk!{
                     op! {
                         id!("x"),
-                        Op::Assign,
+                        Operator::Assign,
                         op!{
                             id!("x"),
-                            Op::Add,
+                            Operator::Add,
                             int!(1)
                         }
                     },
@@ -793,7 +793,7 @@ fn var_typed() {
     assert_eq!(
         expression,
         blk! {,
-            var!(("x", Type::Int) = op!{int!(1), Op::Add, int!(1)})
+            var!(("x", Type::Int) = op!{int!(1), Operator::Add, int!(1)})
         }
     )
 }

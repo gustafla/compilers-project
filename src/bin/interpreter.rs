@@ -1,7 +1,7 @@
 use clap::Parser;
 use compilers_project::{
     self, Config, SymbolTable,
-    ast::{Ast, Expression, Literal, Op},
+    ast::{Ast, Expression, Literal, Operator, op::Ary},
     parse,
 };
 use std::{
@@ -20,7 +20,7 @@ macro_rules! err {
 }
 
 macro_rules! fun {
-    ($id: literal, $valid_args: pat, $body: expr) => {
+    ($id: expr, $valid_args: pat, $body: expr) => {
         (
             $id,
             Value::Fun(Rc::new(|args: &[Value]| {
@@ -38,7 +38,7 @@ macro_rules! fun {
 }
 
 macro_rules! call {
-    ($symtab: expr, $id: literal, $args: expr) => {
+    ($symtab: expr, $id: expr, $args: expr) => {
         match resolve!($symtab, $id).get() {
             Value::Fun(f) => f($args),
             _ => unreachable!("Invalid builtin call"),
@@ -145,7 +145,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
         }
         Expression::BinaryOp(binary_op) => {
             // Special case: Assignment
-            if binary_op.op == Op::Assign {
+            if binary_op.op == Operator::Assign {
                 let key = match binary_op.left.tree.as_ref() {
                     Expression::Identifier(identifier) => identifier.name,
                     _ => panic!("= requires identifier on the lhs"),
@@ -159,7 +159,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
             let a = interpret(&binary_op.left, symtab);
 
             // Short-circuit and
-            if binary_op.op == Op::And {
+            if binary_op.op == Operator::And {
                 if let Value::Bool(a) = a {
                     if !a {
                         return Value::Bool(false);
@@ -168,7 +168,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
             }
 
             // Short-circuit or
-            if binary_op.op == Op::Or {
+            if binary_op.op == Operator::Or {
                 if let Value::Bool(a) = a {
                     if a {
                         return Value::Bool(true);
@@ -180,45 +180,27 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
             let b = interpret(&binary_op.right, symtab);
 
             // Special cases: Eq and Ne
-            match (a, binary_op.op, b) {
-                (Value::Int(a), Op::Eq, Value::Int(b)) => Value::Bool(a == b),
-                (Value::Bool(a), Op::Eq, Value::Bool(b)) => Value::Bool(a == b),
-                (Value::Unit, Op::Eq, Value::Unit) => Value::Bool(true),
-                (Value::Int(a), Op::Ne, Value::Int(b)) => Value::Bool(a != b),
-                (Value::Bool(a), Op::Ne, Value::Bool(b)) => Value::Bool(a != b),
-                (Value::Unit, Op::Ne, Value::Unit) => Value::Bool(false),
-                (_, op @ (Op::Eq | Op::Ne), _) => {
+            match (&a, binary_op.op, &b) {
+                (Value::Int(a), Operator::Eq, Value::Int(b)) => return Value::Bool(a == b),
+                (Value::Bool(a), Operator::Eq, Value::Bool(b)) => return Value::Bool(a == b),
+                (Value::Unit, Operator::Eq, Value::Unit) => return Value::Bool(true),
+                (Value::Int(a), Operator::Ne, Value::Int(b)) => return Value::Bool(a != b),
+                (Value::Bool(a), Operator::Ne, Value::Bool(b)) => return Value::Bool(a != b),
+                (Value::Unit, Operator::Ne, Value::Unit) => return Value::Bool(false),
+                (_, op @ (Operator::Eq | Operator::Ne), _) => {
                     panic!(
                         "Invalid arguments to {op}, expected to have same type between operands",
                     );
                 }
-                // Delegate rest to builtins
-                (a, op, b) => match op {
-                    Op::Add => call!(symtab, "binary_add", &[a, b]),
-                    Op::Sub => call!(symtab, "binary_sub", &[a, b]),
-                    Op::Mul => call!(symtab, "binary_mul", &[a, b]),
-                    Op::Div => call!(symtab, "binary_div", &[a, b]),
-                    Op::Rem => call!(symtab, "binary_rem", &[a, b]),
-                    Op::Leq => call!(symtab, "binary_leq", &[a, b]),
-                    Op::Lt => call!(symtab, "binary_lt", &[a, b]),
-                    Op::Geq => call!(symtab, "binary_geq", &[a, b]),
-                    Op::Gt => call!(symtab, "binary_gt", &[a, b]),
-                    Op::And => call!(symtab, "binary_and", &[a, b]),
-                    Op::Or => call!(symtab, "binary_or", &[a, b]),
-                    op @ Op::Not => unreachable!("Ast has {op} in a binary operation"),
-                    op @ (Op::Assign | Op::Eq | Op::Ne) => {
-                        unreachable!("{op:#?} should have been handled in a special case")
-                    }
-                },
-            }
+                _ => {}
+            };
+
+            // Delegate rest to builtins
+            call!(symtab, binary_op.op.function_name(Ary::Binary), &[a, b])
         }
         Expression::UnaryOp(unary_op) => {
             let value = interpret(&unary_op.right, symtab);
-            match &unary_op.op {
-                Op::Sub => call!(symtab, "unary_sub", &[value]),
-                Op::Not => call!(symtab, "unary_not", &[value]),
-                op => unreachable!("Ast has {op:?} in an unary operation"),
-            }
+            call!(symtab, unary_op.op.function_name(Ary::Unary), &[value])
         }
         Expression::While(node) => {
             while match interpret(&node.condition, symtab) {
@@ -272,41 +254,71 @@ fn main() {
             io::stdin().read_line(&mut buf).unwrap();
             Value::Int(buf.trim().parse().unwrap())
         }),
-        fun!("binary_add", [Value::Int(a), Value::Int(b)], {
+        fun!(
+            Operator::Add.function_name(Ary::Binary),
+            [Value::Int(a), Value::Int(b)],
             Value::Int(a + b)
-        }),
-        fun!("binary_sub", [Value::Int(a), Value::Int(b)], {
+        ),
+        fun!(
+            Operator::Sub.function_name(Ary::Binary),
+            [Value::Int(a), Value::Int(b)],
             Value::Int(a - b)
-        }),
-        fun!("unary_sub", [Value::Int(a)], Value::Int(-a)),
-        fun!("binary_mul", [Value::Int(a), Value::Int(b)], {
+        ),
+        fun!(
+            Operator::Sub.function_name(Ary::Unary),
+            [Value::Int(a)],
+            Value::Int(-a)
+        ),
+        fun!(
+            Operator::Mul.function_name(Ary::Binary),
+            [Value::Int(a), Value::Int(b)],
             Value::Int(a * b)
-        }),
-        fun!("binary_div", [Value::Int(a), Value::Int(b)], {
+        ),
+        fun!(
+            Operator::Div.function_name(Ary::Binary),
+            [Value::Int(a), Value::Int(b)],
             Value::Int(a / b)
-        }),
-        fun!("binary_rem", [Value::Int(a), Value::Int(b)], {
+        ),
+        fun!(
+            Operator::Rem.function_name(Ary::Binary),
+            [Value::Int(a), Value::Int(b)],
             Value::Int(a % b)
-        }),
-        fun!("binary_lt", [Value::Int(a), Value::Int(b)], {
+        ),
+        fun!(
+            Operator::Lt.function_name(Ary::Binary),
+            [Value::Int(a), Value::Int(b)],
             Value::Bool(a < b)
-        }),
-        fun!("binary_leq", [Value::Int(a), Value::Int(b)], {
+        ),
+        fun!(
+            Operator::Leq.function_name(Ary::Binary),
+            [Value::Int(a), Value::Int(b)],
             Value::Bool(a <= b)
-        }),
-        fun!("binary_gt", [Value::Int(a), Value::Int(b)], {
+        ),
+        fun!(
+            Operator::Gt.function_name(Ary::Binary),
+            [Value::Int(a), Value::Int(b)],
             Value::Bool(a > b)
-        }),
-        fun!("binary_geq", [Value::Int(a), Value::Int(b)], {
+        ),
+        fun!(
+            Operator::Geq.function_name(Ary::Binary),
+            [Value::Int(a), Value::Int(b)],
             Value::Bool(a >= b)
-        }),
-        fun!("binary_and", [Value::Bool(a), Value::Bool(b)], {
+        ),
+        fun!(
+            Operator::And.function_name(Ary::Binary),
+            [Value::Bool(a), Value::Bool(b)],
             Value::Bool(*a && *b)
-        }),
-        fun!("binary_or", [Value::Bool(a), Value::Bool(b)], {
+        ),
+        fun!(
+            Operator::Or.function_name(Ary::Binary),
+            [Value::Bool(a), Value::Bool(b)],
             Value::Bool(*a || *b)
-        }),
-        fun!("unary_not", [Value::Bool(a)], Value::Bool(!a)),
+        ),
+        fun!(
+            Operator::Not.function_name(Ary::Unary),
+            [Value::Bool(a)],
+            Value::Bool(!a)
+        ),
     ]);
 
     let code = match interpret(&ast, &mut symtab) {

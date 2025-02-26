@@ -4,7 +4,7 @@ pub mod op;
 use std::fmt::Display;
 
 use crate::{Location, Type};
-pub use op::Op;
+pub use op::Operator;
 
 #[derive(Debug)]
 pub struct Ast<'a> {
@@ -89,13 +89,13 @@ pub struct Var<'a> {
 #[derive(Debug)]
 pub struct BinaryOp<'a> {
     pub left: Ast<'a>,
-    pub op: Op,
+    pub op: Operator,
     pub right: Ast<'a>,
 }
 
 #[derive(Debug)]
 pub struct UnaryOp<'a> {
-    pub op: Op,
+    pub op: Operator,
     pub right: Ast<'a>,
 }
 
