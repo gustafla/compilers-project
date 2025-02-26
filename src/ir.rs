@@ -90,6 +90,9 @@ pub struct Instruction {
 }
 
 struct Generator<'a> {
+    // Counters for vars and labels
+    var: u32,
+    label: u32,
     // Maps AST/source identifiers to IR variables
     symtab: SymbolTable<'a, Var>,
     // Maps IR variables to types
@@ -109,6 +112,8 @@ impl<'a> Generator<'a> {
         let symtab = SymbolTable::from(root_vars);
 
         Self {
+            var: 0,
+            label: 0,
             symtab,
             ins: Vec::new(),
             var_types: HashMap::from([(Self::UNIT.into(), Type::Unit)]),
@@ -135,9 +140,34 @@ impl<'a> Generator<'a> {
             Expression::Identifier(identifier) => {
                 Ok(self.symtab.resolve(identifier.name)?.get().clone())
             }
-            Expression::Conditional(conditional) => todo!(),
+            Expression::Conditional(conditional) => {
+                let then_label = self.new_label();
+                let else_label = self.new_label();
+                let var_cond = self.visit(&conditional.condition)?;
+                self.emit_cond_jump(location, var_cond, then_label.clone(), else_label.clone());
+                self.emit_label(location, then_label);
+                self.visit(&conditional.then_expr)?;
+                self.emit_label(location, else_label);
+                if let Some(else_expr) = &conditional.else_expr {
+                    self.visit(else_expr)?;
+                    // TODO: store to variable and return that?
+                }
+                Ok(Self::UNIT.into())
+            }
             Expression::FnCall(fn_call) => todo!(),
-            Expression::Block(block) => todo!(),
+            Expression::Block(block) => {
+                self.symtab.push();
+                for expr in &block.expressions {
+                    self.visit(expr)?;
+                }
+                let result = if let Some(result) = &block.result {
+                    self.visit(result)?
+                } else {
+                    Var::from(Self::UNIT)
+                };
+                self.symtab.pop();
+                Ok(result)
+            }
             Expression::Var(var) => todo!(),
             Expression::BinaryOp(binary_op) => {
                 let var_op = self
@@ -170,9 +200,16 @@ impl<'a> Generator<'a> {
     }
 
     pub fn new_var(&mut self, ty: &Type) -> Var {
-        let var = format!("x{}", self.var_types.len());
+        let var = format!("x{}", self.var);
+        self.var += 1;
         self.var_types.insert(var.clone(), ty.clone());
         var
+    }
+
+    pub fn new_label(&mut self) -> Label {
+        let label = format!("L{}", self.label);
+        self.label += 1;
+        label
     }
 
     pub fn emit_load_int_const(&mut self, location: &Location, value: Int, dest: Var) {

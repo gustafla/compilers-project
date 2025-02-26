@@ -22,6 +22,8 @@ struct Cli {
     config: compiler::Config,
     #[arg(short, long)]
     output: Option<PathBuf>,
+    #[arg(long, help = "Print IR")]
+    ir: bool,
     #[clap(required = true)]
     files: Vec<PathBuf>,
 }
@@ -29,6 +31,39 @@ struct Cli {
 fn output_to_file(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> io::Result<()> {
     let mut file = OpenOptions::new().create_new(true).write(true).open(path)?;
     file.write_all(data.as_ref())
+}
+
+fn print_ir(code: &str, config: &compiler::Config) {
+    let ir = match compiler::generate_ir(code, config) {
+        Ok(ir) => ir,
+        Err(ref e) => err!(e),
+    };
+    for ins in ir {
+        println!("{}", ins.op);
+    }
+}
+
+fn compile(code: &str, cli: Cli, input: &Path) {
+    let program = match compiler::compile(code, &cli.config) {
+        Ok(program) => program,
+        Err(ref e) => err!(e),
+    };
+
+    let output = cli.output.unwrap_or_else(|| {
+        input
+            .file_stem()
+            .unwrap_or_else(|| OsStr::new("a.out"))
+            .into()
+    });
+
+    if cli.config.verbose {
+        println!("Writing compiler output to {}", output.display());
+    }
+
+    if let Err(ref e) = output_to_file(&output, program) {
+        eprintln!("Can't write compiler output to {}", output.display());
+        err!(e);
+    }
 }
 
 fn main() {
@@ -52,24 +87,9 @@ fn main() {
         Err(ref e) => err!(e),
     };
 
-    let program = match compiler::compile(&code, &cli.config) {
-        Ok(program) => program,
-        Err(ref e) => err!(e),
-    };
-
-    let output = cli.output.unwrap_or_else(|| {
-        input
-            .file_stem()
-            .unwrap_or_else(|| OsStr::new("a.out"))
-            .into()
-    });
-
-    if cli.config.verbose {
-        println!("Writing compiler output to {}", output.display());
-    }
-
-    if let Err(ref e) = output_to_file(&output, program) {
-        eprintln!("Can't write compiler output to {}", output.display());
-        err!(e);
+    if cli.ir {
+        print_ir(&code, &cli.config);
+    } else {
+        compile(&code, cli, &input);
     }
 }

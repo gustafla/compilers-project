@@ -14,6 +14,7 @@ pub use location::Location;
 pub use symtab::SymbolTable;
 pub use typecheck::Type;
 
+use std::sync::LazyLock;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -24,6 +25,8 @@ pub enum Error {
     Parse(#[from] parser::Error),
     #[error("Type checker rejected the program")]
     TypeCheck(#[from] typecheck::Error),
+    #[error("Failed to generate IR")]
+    IrGen(#[from] ir::Error),
 }
 
 pub fn print_error(mut error: &dyn std::error::Error) {
@@ -43,12 +46,8 @@ macro_rules! fun {
     };
 }
 
-pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
-    config::configure(config.clone()); // TODO: this thread_local "global" stinks
-    let tokens = tokenizer::tokenize(code)?;
-    let mut ast = parser::parse(&tokens)?;
-
-    let root_types = &[
+static ROOT_TYPES: LazyLock<Vec<(&str, Type)>> = LazyLock::new(|| {
+    vec![
         ("print_int", fun!((Type::Int) => Type::Unit)),
         ("print_bool", fun!((Type::Bool) => Type::Unit)),
         ("read_int", fun!(() => Type::Int)),
@@ -104,17 +103,34 @@ pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
             Operator::Not.function_name(Ary::Unary),
             fun!((Type::Bool) => Type::Bool),
         ),
-    ];
+    ]
+});
 
-    typecheck::typecheck(&mut ast, root_types)?;
-    dbg!(&ast);
-    let ir = ir::generate_ir(&ast, root_types);
+pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
+    let ir = generate_ir(code, config)?;
     todo!()
 }
 
+pub fn generate_ir(code: &str, config: &Config) -> Result<Vec<ir::Instruction>, Error> {
+    let ast = typecheck(code, config)?;
+    let ins = ir::generate_ir(&ast, &ROOT_TYPES)?;
+    Ok(ins)
+}
+
+pub fn typecheck<'a>(code: &'a str, config: &Config) -> Result<ast::Ast<'a>, Error> {
+    let mut ast = parse(code, config)?;
+    typecheck::typecheck(&mut ast, &ROOT_TYPES)?;
+    Ok(ast)
+}
+
 pub fn parse<'a>(code: &'a str, config: &Config) -> Result<ast::Ast<'a>, Error> {
-    config::configure(config.clone()); // TODO: this thread_local "global" stinks
-    let tokens = tokenizer::tokenize(code)?;
+    let tokens = tokenize(code, config)?;
     let ast = parser::parse(&tokens)?;
     Ok(ast)
+}
+
+pub fn tokenize<'a>(code: &'a str, config: &Config) -> Result<tokenizer::Tokens<'a>, Error> {
+    config::configure(config.clone());
+    let tokens = tokenizer::tokenize(code)?;
+    Ok(tokens)
 }
