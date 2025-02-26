@@ -1,8 +1,16 @@
 use crate::{
     Location, SymbolTable, Type,
     ast::{Ast, Expression, Int, Literal},
+    symtab,
 };
 use std::{collections::HashMap, fmt::Display};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    UnresolvedIdentifier(#[from] symtab::Error),
+}
 
 type Var = String;
 type Label = String;
@@ -77,14 +85,17 @@ impl Display for Op {
 }
 
 pub struct Instruction {
-    location: Location,
-    op: Op,
+    pub location: Location,
+    pub op: Op,
 }
 
 struct Generator<'a> {
+    // Maps AST/source identifiers to IR variables
     symtab: SymbolTable<'a, Var>,
-    ins: Vec<Instruction>,
+    // Maps IR variables to types
     var_types: HashMap<Var, Type>,
+    // Output IR instructions
+    ins: Vec<Instruction>,
 }
 
 impl<'a> Generator<'a> {
@@ -104,13 +115,7 @@ impl<'a> Generator<'a> {
         }
     }
 
-    fn new_var(&mut self, ty: Type) -> Var {
-        let var = format!("x{}", self.var_types.len());
-        self.var_types.insert(var.clone(), ty);
-        var
-    }
-
-    fn visit(&mut self, ast: &Ast<'a>) -> Var {
+    pub fn visit(&mut self, ast: &Ast<'a>) -> Result<Var, Error> {
         let location = ast.location.clone();
         match ast.tree.as_ref() {
             Expression::Literal(literal) => match literal {
@@ -123,23 +128,135 @@ impl<'a> Generator<'a> {
                             dest: var.clone(),
                         },
                     });
-                    var
+                    Ok(var)
                 }
-                Literal::Bool(_) => todo!(),
-                Literal::Str(_) => todo!(),
+                Literal::Bool(value) => {
+                    let var = self.new_var(Type::Bool);
+                    self.ins.push(Instruction {
+                        location,
+                        op: Op::LoadBoolConst {
+                            value: *value,
+                            dest: var.clone(),
+                        },
+                    });
+                    Ok(var)
+                }
+                Literal::Str(_) => unimplemented!("String literals are not supported"),
             },
-            Expression::Identifier(identifier) => todo!(),
+            Expression::Identifier(identifier) => {
+                Ok(self.symtab.resolve(identifier.name)?.get().clone())
+            }
             Expression::Conditional(conditional) => todo!(),
             Expression::FnCall(fn_call) => todo!(),
             Expression::Block(block) => todo!(),
             Expression::Var(var) => todo!(),
-            Expression::BinaryOp(binary_op) => todo!(),
+            Expression::BinaryOp(binary_op) => {
+                let var_op = self.symtab.resolve()
+            },
             Expression::UnaryOp(unary_op) => todo!(),
             Expression::While(_) => todo!(),
         }
     }
+
+    pub fn type_of(&self, key: &str) -> &Type {
+        match self.var_types.get(key) {
+            Some(ty) => ty,
+            None => panic!("Var {key} has no type info. This is a bug."),
+        }
+    }
+
+    pub fn new_var(&mut self, ty: Type) -> Var {
+        let var = format!("x{}", self.var_types.len());
+        self.var_types.insert(var.clone(), ty);
+        var
+    }
+
+    pub fn emit_load_int_const(&mut self, location: &Location, value: Int, dest: Var) {
+        self.ins.push(Instruction {
+            location: location.clone(),
+            op: Op::LoadIntConst { value, dest },
+        })
+    }
+
+    pub fn emit_load_bool_const(&mut self, location: &Location, value: bool, dest: Var) {
+        self.ins.push(Instruction {
+            location: location.clone(),
+            op: Op::LoadBoolConst { value, dest },
+        })
+    }
+
+    pub fn emit_copy(&mut self, location: &Location, source: Var, dest: Var) {
+        self.ins.push(Instruction {
+            location: location.clone(),
+            op: Op::Copy { source, dest },
+        })
+    }
+
+    pub fn emit_call(&mut self, location: &Location, fun: Var, args: Vec<Var>, dest: Var) {
+        self.ins.push(Instruction {
+            location: location.clone(),
+            op: Op::Call { fun, args, dest },
+        })
+    }
+
+    pub fn emit_jump(&mut self, location: &Location, label: Var) {
+        self.ins.push(Instruction {
+            location: location.clone(),
+            op: Op::Jump { label },
+        })
+    }
+
+    pub fn emit_cond_jump(
+        &mut self,
+        location: &Location,
+        cond: Var,
+        then_label: Var,
+        else_label: Var,
+    ) {
+        self.ins.push(Instruction {
+            location: location.clone(),
+            op: Op::CondJump {
+                cond,
+                then_label,
+                else_label,
+            },
+        })
+    }
+    pub fn emit_label(&mut self, location: &Location, label: Var) {
+        self.ins.push(Instruction {
+            location: location.clone(),
+            op: Op::Label(label),
+        })
+    }
 }
 
-pub fn generate_ir<'a>(ast: &Ast<'a>, root_types: &[(&'a str, Type)]) -> Vec<Instruction> {
-    todo!()
+impl From<Generator<'_>> for Vec<Instruction> {
+    fn from(val: Generator<'_>) -> Self {
+        val.ins
+    }
+}
+
+pub fn generate_ir<'a>(
+    ast: &Ast<'a>,
+    root_types: &[(&'a str, Type)],
+) -> Result<Vec<Instruction>, Error> {
+    let mut generator = Generator::new(root_types);
+    let var_final_result = generator.visit(ast)?;
+    match generator.type_of(&var_final_result) {
+        Type::Int => generator.emit_call(
+            &Location::default(),
+            "print_int".into(),
+            vec![var_final_result],
+            Generator::UNIT.into(),
+        ),
+        Type::Bool => generator.emit_call(
+            &Location::default(),
+            "print_bool".into(),
+            vec![var_final_result],
+            Generator::UNIT.into(),
+        ),
+        Type::Unit => {}
+        Type::Fun { .. } => unreachable!("Function values are not supported"),
+    }
+    Ok(generator.into())
 }
