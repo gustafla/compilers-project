@@ -218,7 +218,7 @@ fn visit<'a>(ast: &mut Ast<'a>, symtab: &mut SymbolTable<'a, Type>) -> Result<Ty
             if condition != Type::Bool {
                 return Err(Error::WhileLoopCondition(condition));
             }
-            visit(&mut while_loop.do_expr, symtab);
+            visit(&mut while_loop.do_expr, symtab)?;
             Type::Unit
         }
     };

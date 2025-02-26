@@ -52,6 +52,7 @@ fn compile(code: &str, cli: Cli, input: &Path) {
     let output = cli.output.unwrap_or_else(|| {
         input
             .file_stem()
+            .filter(|_| input != Path::new("-"))
             .unwrap_or_else(|| OsStr::new("a.out"))
             .into()
     });
