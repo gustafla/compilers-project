@@ -47,8 +47,8 @@ impl Default for Location {
 
 #[derive(Debug)]
 pub struct ErrorLocation<E: Error + 'static> {
-    line: u32,
-    column: u32,
+    line: usize,
+    column: usize,
     error: E,
 }
 
@@ -61,5 +61,15 @@ impl<E: Error> Display for ErrorLocation<E> {
 impl<E: Error> Error for ErrorLocation<E> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(&self.error)
+    }
+}
+
+impl<E: Error> ErrorLocation<E> {
+    pub fn new(location: &Location, code: &str, error: E) -> Self {
+        Self {
+            line: location.line(code),
+            column: location.column(code),
+            error,
+        }
     }
 }

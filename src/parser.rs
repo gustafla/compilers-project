@@ -55,23 +55,13 @@ fn parse_op(tokens: &Tokens<'_>, at: &mut usize) -> Result<Operator, Error> {
         Ok(op) => op,
         Err(..) => {
             return Err(Error::ExpectedOneOf {
-                of: vec![
-                    "+".into(),
-                    "-".into(),
-                    "*".into(),
-                    "/".into(),
-                    "%".into(),
-                    "==".into(),
-                    "!=".into(),
-                    "<=".into(),
-                    "<".into(),
-                    ">=".into(),
-                    ">".into(),
-                    "and".into(),
-                    "or".into(),
-                    "not".into(),
-                    "=".into(),
-                ],
+                of: [
+                    "+", "-", "*", "/", "%", "==", "!=", "<=", "<", ">=", ">", "and", "or", "not",
+                    "=",
+                ]
+                .into_iter()
+                .map(String::from)
+                .collect(),
                 token: fragment.into(),
             });
         }
