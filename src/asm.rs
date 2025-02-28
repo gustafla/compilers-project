@@ -1,9 +1,10 @@
+mod intrinsics;
+
+use crate::ir;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write,
 };
-
-use crate::ir;
 
 struct Locals {
     stack_used: usize,
@@ -77,18 +78,21 @@ macro_rules! emit {
         writeln!(&mut $out, $($arg)*).ok();
     }};
 }
+pub(crate) use emit;
 
 macro_rules! emit_ind {
     ($out: expr, $($arg: tt)*) => {{
         write!(&mut $out, "    ").ok();
-        emit!($out, $($arg)*);
+        crate::asm::emit!($out, $($arg)*);
     }};
 }
+pub(crate) use emit_ind;
 
 pub fn generate_assembly(ins: &[ir::Instruction]) -> String {
     let mut out = String::new();
 
     let locals = Locals::new(ins);
+    let intrinsics = intrinsics::intrinsics();
 
     emit_ind!(out, ".extern print_int");
     emit_ind!(out, ".extern print_bool");
@@ -104,20 +108,24 @@ pub fn generate_assembly(ins: &[ir::Instruction]) -> String {
     emit_ind!(out, "subq ${}, %rsp", locals.stack_used());
 
     for insn in ins {
-        emit_ind!(out, "# {}", insn.op);
+        if let ir::Op::Label(..) = insn.op {
+            emit!(out, "");
+        } else {
+            emit_ind!(out, "# {}", insn.op);
+        }
+
         match &insn.op {
             ir::Op::Label(label) => {
-                emit!(out, "");
                 emit!(out, ".L{}:", label);
             }
             ir::Op::LoadBoolConst { value, dest } => {
-                emit_ind!(out, "movq {}, {}", *value as i64, locals.get_ref(dest));
+                emit_ind!(out, "movq ${}, {}", *value as i64, locals.get_ref(dest));
             }
             ir::Op::LoadIntConst { value, dest } => {
                 if ((-2i64).pow(31)..2i64.pow(31)).contains(value) {
-                    emit_ind!(out, "movq {}, {}", value, locals.get_ref(dest));
+                    emit_ind!(out, "movq ${}, {}", value, locals.get_ref(dest));
                 } else {
-                    emit_ind!(out, "movabsq {}, %rax", value);
+                    emit_ind!(out, "movabsq ${}, %rax", value);
                     emit_ind!(out, "movq %rax, {}", locals.get_ref(dest));
                 }
             }
@@ -126,7 +134,19 @@ pub fn generate_assembly(ins: &[ir::Instruction]) -> String {
                 emit_ind!(out, "movq %rax, {}", locals.get_ref(dest));
             }
             ir::Op::Call { fun, args, dest } => {
-                // TODO: Intrinsics
+                // TODO: and, or, assign
+
+                if let Some(intrinsic) = intrinsics.get(fun.as_str()) {
+                    let arg_refs: Vec<&str> = args.iter().map(|a| locals.get_ref(a)).collect();
+                    intrinsic(intrinsics::Args {
+                        arg_refs: &arg_refs,
+                        result_register: "%rax",
+                        out: &mut out,
+                    });
+                    emit_ind!(out, "movq %rax, {}", locals.get_ref(dest));
+                    continue;
+                }
+
                 for (reg, arg) in ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
                     .iter()
                     .zip(args.iter().take(6))
@@ -150,7 +170,9 @@ pub fn generate_assembly(ins: &[ir::Instruction]) -> String {
                 then_label,
                 else_label,
             } => {
-                emit_ind!(out, "")
+                emit_ind!(out, "cmpq $0, {}", locals.get_ref(cond));
+                emit_ind!(out, "jne .L{}", then_label);
+                emit_ind!(out, "jmp .L{}", else_label);
             }
         }
     }

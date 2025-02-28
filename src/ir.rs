@@ -209,7 +209,13 @@ impl<'a> Generator<'a> {
                 self.symtab.pop();
                 Ok(result)
             }
-            Expression::Var(var) => todo!(),
+            Expression::Var(var) => {
+                let init = self.visit(&var.init)?;
+                let ir_var = self.new_var(var.init.ty.as_ref().unwrap());
+                self.symtab.insert(var.id.name, ir_var.clone());
+                self.emit_copy(location, init, ir_var);
+                Ok(Self::UNIT.into())
+            }
             Expression::BinaryOp(binary_op) => {
                 let var_op = self
                     .symtab
