@@ -1,0 +1,13 @@
+- [ ] Assembly generator
+- [ ] IR generator
+  - [ ] Make Vars and Labels integer-based
+  - [ ] Tests for IR generator
+- [ ] Add function support
+- [ ] Add break and continue support
+- [ ] Errors with location
+  - [X] Create appropriate struct and Error implementation
+  - [ ] Parser needs to be refactored, None-cases must contain Location (`enum ParseResult`)
+- [X] Type checker
+  - [ ] Add tests for type checker
+- [X] Parser
+  - [X] Add tests for parser
