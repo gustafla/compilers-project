@@ -1,1 +1,3 @@
 /target
+.test-gadget/*
+!.test-gadget/course.json
