@@ -1,7 +1,7 @@
 mod asm;
 pub mod ast;
 mod config;
-mod ir;
+pub mod ir;
 mod location;
 pub mod parser;
 mod symtab;
@@ -108,8 +108,14 @@ static ROOT_TYPES: LazyLock<Vec<(&str, Type)>> = LazyLock::new(|| {
 });
 
 pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
-    let ir = generate_ir(code, config)?;
+    let asm = generate_assembly(code, config)?;
     todo!()
+}
+
+pub fn generate_assembly(code: &str, config: &Config) -> Result<String, Error> {
+    let ins = generate_ir(code, config)?;
+    let asm = asm::generate_assembly(&ins);
+    Ok(asm)
 }
 
 pub fn generate_ir(code: &str, config: &Config) -> Result<Vec<ir::Instruction>, Error> {

@@ -24,6 +24,8 @@ struct Cli {
     output: Option<PathBuf>,
     #[arg(long, help = "Print IR")]
     ir: bool,
+    #[arg(long, help = "Print assembly")]
+    asm: bool,
     #[clap(required = true)]
     files: Vec<PathBuf>,
 }
@@ -39,6 +41,9 @@ fn print_ir(code: &str, config: &compiler::Config) {
         Err(ref e) => err!(e),
     };
     for ins in ir {
+        if let compiler::ir::Op::Label(_) = ins.op {
+            println!();
+        }
         println!("{}", ins.op);
     }
 }
@@ -90,6 +95,11 @@ fn main() {
 
     if cli.ir {
         print_ir(&code, &cli.config);
+    } else if cli.asm {
+        match compiler::generate_assembly(&code, &cli.config) {
+            Ok(asm) => println!("{asm}"),
+            Err(ref e) => err!(e),
+        }
     } else {
         compile(&code, cli, &input);
     }

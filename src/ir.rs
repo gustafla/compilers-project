@@ -18,7 +18,6 @@ pub type Label = String;
 #[derive(Debug)]
 pub enum Op {
     Label(Label),
-    Nop,
     LoadBoolConst {
         value: bool,
         dest: Var,
@@ -50,14 +49,13 @@ impl Display for Op {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Indent, but not labels and nops
         match self {
-            Op::Label(_) | Op::Nop => {}
+            Op::Label(_) => {}
             _ => write!(f, "    ")?,
         };
         match self {
             Op::Label(label) => {
                 write!(f, "{label}:")
             }
-            Op::Nop => Ok(()),
             Op::LoadBoolConst { value, dest } => {
                 write!(f, "LoadBoolConst({value}, {dest})")
             }
@@ -256,10 +254,6 @@ impl<'a> Generator<'a> {
     }
 
     pub fn emit_label(&mut self, location: &Location, label: Var) {
-        self.ins.push(Instruction {
-            location: location.clone(),
-            op: Op::Nop,
-        });
         self.ins.push(Instruction {
             location: location.clone(),
             op: Op::Label(label),
