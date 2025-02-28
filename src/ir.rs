@@ -12,8 +12,8 @@ pub enum Error {
     UnresolvedIdentifier(#[from] symtab::Error),
 }
 
-type Var = String;
-type Label = String;
+pub type Var = String;
+pub type Label = String;
 
 #[derive(Debug)]
 pub enum Op {

@@ -1,3 +1,4 @@
+mod asm;
 pub mod ast;
 mod config;
 mod ir;
