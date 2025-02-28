@@ -3,7 +3,7 @@ use compilers_project as compiler;
 use std::{
     error::Error,
     ffi::OsStr,
-    fs::{self, OpenOptions},
+    fs::{self, OpenOptions, Permissions},
     io::{self, Write},
     path::{Path, PathBuf},
 };
@@ -32,7 +32,15 @@ struct Cli {
 
 fn output_to_file(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> io::Result<()> {
     let mut file = OpenOptions::new().create_new(true).write(true).open(path)?;
-    file.write_all(data.as_ref())
+    file.write_all(data.as_ref())?;
+    #[cfg(target_family = "unix")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut mode = file.metadata()?.permissions().mode();
+        mode |= 0o111;
+        file.set_permissions(Permissions::from_mode(mode))?;
+    }
+    Ok(())
 }
 
 fn print_ir(code: &str, config: &compiler::Config) {

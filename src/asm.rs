@@ -1,6 +1,8 @@
+mod assembler;
 mod intrinsics;
 
 use crate::ir;
+pub use assembler::assemble;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write,
