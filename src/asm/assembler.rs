@@ -1,29 +1,20 @@
 use std::{
-    env,
     fs::{self, File},
     io::Read,
-    path::{self, Path, PathBuf},
+    path::{Path, PathBuf},
     process,
 };
 
-pub fn assemble(
-    assembly_code: &str,
-    workdir: Option<impl AsRef<Path>>,
-    tempfile_basename: impl AsRef<Path>,
-    link_with_c: bool,
-    extra_libraries: &[&str],
-) -> Vec<u8> {
-    let workdir = if let Some(workdir) = workdir {
-        path::absolute(workdir).unwrap()
-    } else {
-        // TODO: This is insecure but works for a toy compiler such as ours
-        // Real implementation should use tempfile-crate
-        env::temp_dir().join("compiler")
-    };
-    assemble_impl(
+use crate::config;
+
+pub fn assemble(assembly_code: &str, link_with_c: bool, extra_libraries: &[&str]) -> Vec<u8> {
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
+
+    let res = assemble_impl(
         assembly_code,
-        workdir,
-        tempfile_basename,
+        path,
+        "program",
         link_with_c,
         extra_libraries,
         |path| {
@@ -32,7 +23,11 @@ pub fn assemble(
             file.read_to_end(&mut buf).unwrap();
             buf
         },
-    )
+    );
+    if config::verbose() {
+        eprintln!("Assembled and linked successfully");
+    }
+    res
 }
 
 fn assemble_impl<T>(
@@ -52,11 +47,13 @@ fn assemble_impl<T>(
     let program_obj = workdir.join(tempfile_basename.with_extension("o"));
     let output_file = workdir.join("a.out");
 
-    dbg!(&stdlib_asm);
-    dbg!(&stdlib_obj);
-    dbg!(&program_asm);
-    dbg!(&program_obj);
-    dbg!(&output_file);
+    if crate::config::verbose() {
+        eprintln!("Writing stdlib code to: {}", stdlib_asm.display());
+        eprintln!("Writing stdlib obj to: {}", stdlib_obj.display());
+        eprintln!("Writing program code to: {}", program_asm.display());
+        eprintln!("Writing program obj to: {}", program_obj.display());
+        eprintln!("Writing executable to: {}", output_file.display());
+    }
 
     let final_stdlib_asm_code = if link_with_c {
         drop_start_symbol(STDLIB_ASM_CODE)
@@ -64,7 +61,6 @@ fn assemble_impl<T>(
         STDLIB_ASM_CODE.into()
     };
 
-    fs::create_dir(workdir).ok();
     fs::write(&stdlib_asm, final_stdlib_asm_code).unwrap();
     fs::write(&program_asm, assembly_code).unwrap();
 

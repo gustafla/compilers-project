@@ -109,9 +109,8 @@ static ROOT_TYPES: LazyLock<Vec<(&str, Type)>> = LazyLock::new(|| {
 
 pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
     let assembly_code = generate_assembly(code, config)?;
-    let workdir: Option<&str> = None;
-    let code = asm::assemble(&assembly_code, workdir, "program", false, &[]);
-    Ok(code)
+    let x86_64_elf = asm::assemble(&assembly_code, false, &[]);
+    Ok(x86_64_elf)
 }
 
 pub fn generate_assembly(code: &str, config: &Config) -> Result<String, Error> {

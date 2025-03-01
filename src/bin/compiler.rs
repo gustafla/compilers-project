@@ -31,7 +31,11 @@ struct Cli {
 }
 
 fn output_to_file(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> io::Result<()> {
-    let mut file = OpenOptions::new().create_new(true).write(true).open(path)?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(path)?;
     file.write_all(data.as_ref())?;
     #[cfg(target_family = "unix")]
     {
