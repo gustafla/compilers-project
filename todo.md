@@ -1,5 +1,8 @@
-- [ ] Assembly generator
-- [ ] IR generator
+- [X] Assembly generator
+  - [ ] Corner cases like assignment, and, or
+  - [ ] Error handling for asm::assembler
+- [X] IR generator
+  - [ ] Corner cases like assignment
   - [ ] Make Vars and Labels integer-based
   - [ ] Tests for IR generator
 - [ ] Add function support
