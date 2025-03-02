@@ -136,8 +136,6 @@ pub fn generate_assembly(ins: &[ir::Instruction]) -> String {
                 emit_ind!(out, "movq %rax, {}", locals.get_ref(dest));
             }
             ir::Op::Call { fun, args, dest } => {
-                // TODO: and, or, assign
-
                 if let Some(intrinsic) = intrinsics.get(fun.as_str()) {
                     let arg_refs: Vec<&str> = args.iter().map(|a| locals.get_ref(a)).collect();
                     intrinsic(intrinsics::Args {
