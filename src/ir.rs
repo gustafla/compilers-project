@@ -132,19 +132,19 @@ impl<'a> Generator<'a> {
         let location = &ast.location;
         let ty = ast.ty.as_ref().expect("AST should have been type checked");
         match ast.tree.as_ref() {
-            Expression::Literal(literal) => {
-                let var = self.new_var(&Type::Int);
-                match literal {
-                    Literal::Int(value) => {
-                        self.emit_load_int_const(location, *value, &var);
-                    }
-                    Literal::Bool(value) => {
-                        self.emit_load_bool_const(location, *value, &var);
-                    }
-                    Literal::Str(_) => unimplemented!("String literals are not supported"),
+            Expression::Literal(literal) => match literal {
+                Literal::Int(value) => {
+                    let var = self.new_var(&Type::Int);
+                    self.emit_load_int_const(location, *value, &var);
+                    Ok(var)
                 }
-                Ok(var)
-            }
+                Literal::Bool(value) => {
+                    let var = self.new_var(&Type::Bool);
+                    self.emit_load_bool_const(location, *value, &var);
+                    Ok(var)
+                }
+                Literal::Str(_) => unimplemented!("String literals are not supported"),
+            },
             Expression::Identifier(identifier) => {
                 Ok(self.symtab.resolve(identifier.name)?.get().clone())
             }
