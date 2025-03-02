@@ -226,7 +226,7 @@ impl<'a> Generator<'a> {
                     let var_left = self.symtab.resolve(key)?.get().clone();
                     let var_right = self.visit(&binary_op.right)?;
                     self.emit_copy(location, &var_right, &var_left);
-                    return Ok(Self::UNIT.into());
+                    return Ok(var_right);
                 }
 
                 let var_left = self.visit(&binary_op.left)?;

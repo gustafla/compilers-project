@@ -193,7 +193,7 @@ fn visit<'a>(ast: &mut Ast<'a>, symtab: &mut SymbolTable<'a, Type>) -> Result<Ty
                 if lhs != rhs {
                     return Err(Error::AssignWrongType(String::from(key), lhs, rhs));
                 }
-                Type::Unit
+                rhs
             } else {
                 let lhs = visit(&mut binary_op.left, symtab)?;
                 let rhs = visit(&mut binary_op.right, symtab)?;

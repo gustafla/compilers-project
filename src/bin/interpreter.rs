@@ -151,8 +151,8 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
                     _ => panic!("= requires identifier on the lhs"),
                 };
                 let value = interpret(&binary_op.right, symtab);
-                resolve!(symtab, key).insert(value);
-                return Value::Unit;
+                resolve!(symtab, key).insert(value.clone());
+                return value;
             }
 
             // Interpret lhs
