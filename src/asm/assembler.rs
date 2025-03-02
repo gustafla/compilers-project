@@ -35,7 +35,7 @@ pub fn assemble(
     link_with_c: bool,
     extra_libraries: &[&str],
 ) -> Result<Vec<u8>, Error> {
-    let tempdir = tempfile::tempdir().map_err(|e| Error::TmpDirCreate(e))?;
+    let tempdir = tempfile::tempdir().map_err(Error::TmpDirCreate)?;
     let path = tempdir.path();
 
     let res = assemble_impl(
@@ -94,7 +94,7 @@ fn assemble_impl<T>(
     fs::write(&program_asm, assembly_code)
         .map_err(|e| Error::TmpDirWrite(program_asm.clone(), e))?;
 
-    let asm = Binutil::assembler().flags(&["-g"]);
+    let asm = Binutil::assembler().flags(["-g"]);
     asm.run(&stdlib_obj, &[stdlib_asm])?;
     asm.run(&program_obj, &[program_asm])?;
 
@@ -122,7 +122,7 @@ fn drop_start_symbol(code: &str) -> String {
             })
         }) {
         Some(asm) => asm,
-        None => return String::from(code),
+        None => String::from(code),
     }
 }
 

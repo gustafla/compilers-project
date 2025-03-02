@@ -1,6 +1,6 @@
 use crate::{
     Location, SymbolTable, Type,
-    ast::{Ast, Expression, Int, Literal, op::Ary},
+    ast::{Ast, Expression, Int, Literal, Operator, op::Ary},
     symtab,
 };
 use std::{collections::HashMap, fmt::Display};
@@ -217,27 +217,81 @@ impl<'a> Generator<'a> {
                 Ok(Self::UNIT.into())
             }
             Expression::BinaryOp(binary_op) => {
-                let var_op = self
-                    .symtab
-                    .resolve(binary_op.op.function_name(Ary::Binary))?
-                    .get()
-                    .clone();
-                // TODO: Special cases for =, and and or
+                // TODO: Special case for =
+
                 let var_left = self.visit(&binary_op.left)?;
-                let var_right = self.visit(&binary_op.right)?;
                 let var_result = self.new_var(ty);
-                self.emit_call(location, &var_op, &[var_left, var_right], &var_result);
+
+                match binary_op.op {
+                    // Special cases for short-circuiting and and or
+                    op @ (Operator::And | Operator::Or) => {
+                        let yup = self.new_label();
+                        let nope = self.new_label();
+                        let end = self.new_label();
+
+                        match op {
+                            Operator::And => {
+                                // Negate left
+                                // TODO: This can be done without calling unary_not, just flip the yup and nope -branches
+                                let not_fun = self
+                                    .symtab
+                                    .resolve(Operator::Not.function_name(Ary::Unary))?
+                                    .get()
+                                    .clone();
+                                let not_left = self.new_var(&Type::Bool);
+                                self.emit_call(location, not_fun, &[var_left.clone()], &not_left);
+
+                                // Create conditional
+                                self.emit_cond_jump(location, not_left, &yup, &nope);
+
+                                // If left is false, short-circuit to false
+                                self.emit_label(location, &yup);
+                                self.emit_load_bool_const(location, false, &var_result);
+                                self.emit_jump(location, &end);
+                            }
+                            Operator::Or => {
+                                // Create conditional
+                                self.emit_cond_jump(location, var_left, &yup, &nope);
+
+                                // If left is true, short-circuit to true
+                                self.emit_label(location, &yup);
+                                self.emit_load_bool_const(location, true, &var_result);
+                                self.emit_jump(location, &end);
+                            }
+                            _ => unreachable!(),
+                        }
+
+                        // Else check rhs
+                        self.emit_label(location, &nope);
+                        let var_right = self.visit(&binary_op.right)?;
+                        self.emit_copy(location, &var_right, &var_result);
+
+                        // End
+                        self.emit_label(location, &end);
+                    }
+                    // Otherwise emit Call
+                    op => {
+                        let fun = self
+                            .symtab
+                            .resolve(op.function_name(Ary::Binary))?
+                            .get()
+                            .clone();
+
+                        let var_right = self.visit(&binary_op.right)?;
+                        self.emit_call(location, &fun, &[var_left, var_right], &var_result);
+                    }
+                }
                 Ok(var_result)
             }
             Expression::UnaryOp(unary_op) => {
-                let var_op = self
+                let fun = self
                     .symtab
                     .resolve(unary_op.op.function_name(Ary::Unary))?
                     .get()
                     .clone();
                 let var_right = self.visit(&unary_op.right)?;
                 let var_result = self.new_var(ty);
-                self.emit_call(location, &var_op, &[var_right], &var_result);
+                self.emit_call(location, &fun, &[var_right], &var_result);
                 Ok(var_result)
             }
             Expression::While(while_loop) => {
