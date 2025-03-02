@@ -124,10 +124,7 @@ pub fn generate_assembly(ins: &[ir::Instruction]) -> String {
                 emit_ind!(out, "movq ${}, {}", *value as i64, locals.get_ref(dest));
             }
             ir::Op::LoadIntConst { value, dest } => {
-                let value: i64 = (*value)
-                    .try_into()
-                    .expect("Integer value does not fit into a 64-bit register");
-                if ((-2i64).pow(31)..2i64.pow(31)).contains(&value) {
+                if ((-2i64).pow(31)..2i64.pow(31)).contains(value) {
                     emit_ind!(out, "movq ${}, {}", value, locals.get_ref(dest));
                 } else {
                     emit_ind!(out, "movabsq ${}, %rax", value);

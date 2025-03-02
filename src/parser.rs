@@ -88,6 +88,24 @@ fn parse_literal<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'
                 source,
             }),
         },
+        Kind::Operator => {
+            // Accept a left minus sign to create negative integer literals
+            match (fragment, tokens.peek_ahead(at)) {
+                ("-", (token, fragment)) if token.kind() == Kind::Integer => {
+                    match format!("-{}", fragment).parse::<Int>() {
+                        Ok(i) => {
+                            tokens.consume(at);
+                            Ok(Literal::Int(i))
+                        }
+                        Err(source) => Err(Error::Int {
+                            token: fragment.into(),
+                            source,
+                        }),
+                    }
+                }
+                _ => return None,
+            }
+        }
         Kind::StrLiteral => {
             let unquoted = &fragment[1..token.len() - 1];
             // TODO: Process escape syntax like \"\" and \\
@@ -458,8 +476,16 @@ fn parse_unary_expr<'a, 'b>(
     traceln!("parse_unary_expr for {ops:?}, token = {fragment:?} at {at}");
 
     let mut op = Vec::new();
-    while ops.contains(&tokens.peek(at).1) {
-        op.push((tokens.peek(at).0.location().start(), parse_op(tokens, at)?));
+    loop {
+        let (token, fragment) = tokens.peek(at);
+        if !ops.contains(&fragment) {
+            break;
+        }
+        // Special case: if op is minus sign and an integer follows, leave minus for the parse fn
+        if fragment == "-" && tokens.peek_ahead(at).0.kind() == Kind::Integer {
+            break;
+        }
+        op.push((token.location().start(), parse_op(tokens, at)?));
     }
 
     let mut ast = parse_term_fn(tokens, at)?;

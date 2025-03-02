@@ -88,9 +88,7 @@ impl std::fmt::Debug for Value {
 impl From<&Literal<'_>> for Value {
     fn from(value: &Literal) -> Self {
         match value {
-            Literal::Int(i) => {
-                Value::Int((*i).try_into().expect("Integer does not fit into 64 bits"))
-            }
+            Literal::Int(i) => Value::Int(*i),
             Literal::Bool(b) => Value::Bool(*b),
             Literal::Str(_) => unimplemented!("String literals are not supported"),
         }
