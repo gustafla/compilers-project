@@ -348,8 +348,8 @@ fn unary() {
         blk! {,
                 con! {
                 op!{Operator::Not, id!("foo")},
-                int!(-1),
-                int!(-2)
+                op!{Operator::Sub, int!(1)},
+                op!{Operator::Sub, int!(2)}
             }
         }
     )
@@ -365,8 +365,8 @@ fn nested_unary() {
         blk! {,
                 con! {
                 op!{Operator::Not, op!{Operator::Not, op!{Operator::Not, op!{Operator::Not, id!("foo")}}}},
-                op!{Operator::Sub, int!(-1)},
-                op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub,int!(-2)}}}},
+                op!{Operator::Sub, op!{Operator::Sub, int!(1)}},
+                op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, int!(2)}}}}},
             }
         }
     );
@@ -433,7 +433,10 @@ fn precedence_complex() {
                                                         int!(1),
                                                     },
                                                     Operator::Rem,
-                                                    int!(-1),
+                                                    op! {
+                                                        Operator::Sub,
+                                                        int!(1),
+                                                    }
                                                 }
                                             }
                                         }

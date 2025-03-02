@@ -124,7 +124,7 @@ pub fn generate_assembly(ins: &[ir::Instruction]) -> String {
                 emit_ind!(out, "movq ${}, {}", *value as i64, locals.get_ref(dest));
             }
             ir::Op::LoadIntConst { value, dest } => {
-                if ((-2i64).pow(31)..2i64.pow(31)).contains(value) {
+                if *value < 2u64.pow(31) || *value >= 0xFFFFFFFF80000000 {
                     emit_ind!(out, "movq ${}, {}", value, locals.get_ref(dest));
                 } else {
                     emit_ind!(out, "movabsq ${}, %rax", value);
