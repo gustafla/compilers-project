@@ -2,7 +2,7 @@ mod assembler;
 mod intrinsics;
 
 use crate::ir;
-pub use assembler::assemble;
+pub use assembler::{Error, assemble};
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write,

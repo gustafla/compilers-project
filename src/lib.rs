@@ -28,6 +28,8 @@ pub enum Error {
     TypeCheck(#[from] typecheck::Error),
     #[error("Failed to generate IR")]
     IrGen(#[from] ir::Error),
+    #[error("Failed to assemble and link")]
+    Assembler(#[from] asm::Error),
 }
 
 pub fn print_error(mut error: &dyn std::error::Error) {
@@ -109,7 +111,7 @@ static ROOT_TYPES: LazyLock<Vec<(&str, Type)>> = LazyLock::new(|| {
 
 pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
     let assembly_code = generate_assembly(code, config)?;
-    let x86_64_elf = asm::assemble(&assembly_code, false, &[]);
+    let x86_64_elf = asm::assemble(&assembly_code, false, &[])?;
     Ok(x86_64_elf)
 }
 
