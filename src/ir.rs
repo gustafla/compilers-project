@@ -232,7 +232,7 @@ impl<'a> Generator<'a> {
             Expression::UnaryOp(unary_op) => {
                 let var_op = self
                     .symtab
-                    .resolve(unary_op.op.function_name(Ary::Binary))?
+                    .resolve(unary_op.op.function_name(Ary::Unary))?
                     .get()
                     .clone();
                 let var_right = self.visit(&unary_op.right)?;
