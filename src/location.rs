@@ -64,6 +64,7 @@ impl<E: Error> Error for ErrorLocation<E> {
     }
 }
 
+#[expect(dead_code, reason = "This is complicated to implement. See todo.md")]
 impl<E: Error> ErrorLocation<E> {
     pub fn new(location: &Location, code: &str, error: E) -> Self {
         Self {

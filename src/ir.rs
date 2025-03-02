@@ -31,7 +31,7 @@ pub enum Op {
         dest: Var,
     },
     Call {
-        fun: Var,
+        fun: String,
         args: Vec<Var>,
         dest: Var,
     },
@@ -136,10 +136,10 @@ impl<'a> Generator<'a> {
                 let var = self.new_var(&Type::Int);
                 match literal {
                     Literal::Int(value) => {
-                        self.emit_load_int_const(location, *value, var.clone());
+                        self.emit_load_int_const(location, *value, &var);
                     }
                     Literal::Bool(value) => {
-                        self.emit_load_bool_const(location, *value, var.clone());
+                        self.emit_load_bool_const(location, *value, &var);
                     }
                     Literal::Str(_) => unimplemented!("String literals are not supported"),
                 }
@@ -154,35 +154,35 @@ impl<'a> Generator<'a> {
 
                 // Emit the main CondJump
                 let var_cond = self.visit(&conditional.condition)?;
-                self.emit_cond_jump(location, var_cond, then_label.clone(), else_label.clone());
+                self.emit_cond_jump(location, &var_cond, &then_label, &else_label);
 
                 // Emit then-branch
-                self.emit_label(location, then_label);
+                self.emit_label(location, &then_label);
                 let var_result = self.visit(&conditional.then_expr)?;
 
                 if let Some(else_expr) = &conditional.else_expr {
                     // Copy result to var in both branches of the IR
                     let var_output = self.new_var(ty);
-                    self.emit_copy(location, var_result, var_output.clone());
+                    self.emit_copy(location, &var_result, &var_output);
 
                     // Emit jump that ends the then-branch
                     let end_label = self.new_label();
-                    self.emit_jump(location, end_label.clone());
+                    self.emit_jump(location, &end_label);
 
                     // Emit label that starts the else branch
-                    self.emit_label(location, else_label);
+                    self.emit_label(location, &else_label);
                     let var_result = self.visit(else_expr)?;
 
                     // Copy result to var in both branches of the IR
-                    self.emit_copy(location, var_result, var_output.clone());
+                    self.emit_copy(location, &var_result, &var_output);
 
                     // Emit end label for the
-                    self.emit_label(location, end_label);
+                    self.emit_label(location, &end_label);
 
                     Ok(var_output)
                 } else {
                     // Use else-label as an end label as nothing gets emitted after it
-                    self.emit_label(location, else_label);
+                    self.emit_label(location, &else_label);
                     Ok(Self::UNIT.into())
                 }
             }
@@ -193,7 +193,7 @@ impl<'a> Generator<'a> {
                     args.push(self.visit(arg)?);
                 }
                 let dest = self.new_var(ty);
-                self.emit_call(location, fun, args, dest.clone());
+                self.emit_call(location, &fun, &args, &dest);
                 Ok(dest)
             }
             Expression::Block(block) => {
@@ -204,7 +204,7 @@ impl<'a> Generator<'a> {
                 let result = if let Some(result) = &block.result {
                     self.visit(result)?
                 } else {
-                    Var::from(Self::UNIT)
+                    Self::UNIT.into()
                 };
                 self.symtab.pop();
                 Ok(result)
@@ -213,7 +213,7 @@ impl<'a> Generator<'a> {
                 let init = self.visit(&var.init)?;
                 let ir_var = self.new_var(var.init.ty.as_ref().unwrap());
                 self.symtab.insert(var.id.name, ir_var.clone());
-                self.emit_copy(location, init, ir_var);
+                self.emit_copy(location, &init, &ir_var);
                 Ok(Self::UNIT.into())
             }
             Expression::BinaryOp(binary_op) => {
@@ -226,16 +226,34 @@ impl<'a> Generator<'a> {
                 let var_left = self.visit(&binary_op.left)?;
                 let var_right = self.visit(&binary_op.right)?;
                 let var_result = self.new_var(ty);
-                self.emit_call(
-                    location,
-                    var_op,
-                    vec![var_left, var_right],
-                    var_result.clone(),
-                );
+                self.emit_call(location, &var_op, &[var_left, var_right], &var_result);
                 Ok(var_result)
             }
-            Expression::UnaryOp(unary_op) => todo!(),
-            Expression::While(_) => todo!(),
+            Expression::UnaryOp(unary_op) => {
+                let var_op = self
+                    .symtab
+                    .resolve(unary_op.op.function_name(Ary::Binary))?
+                    .get()
+                    .clone();
+                let var_right = self.visit(&unary_op.right)?;
+                let var_result = self.new_var(ty);
+                self.emit_call(location, &var_op, &[var_right], &var_result);
+                Ok(var_result)
+            }
+            Expression::While(while_loop) => {
+                let start = self.new_label();
+                let body = self.new_label();
+                let out = self.new_label();
+
+                self.emit_label(location, &start);
+                let cond = self.visit(&while_loop.condition)?;
+                self.emit_cond_jump(location, &cond, &body, &out);
+                self.emit_label(location, &body);
+                self.visit(&while_loop.do_expr)?;
+                self.emit_jump(location, &start);
+                self.emit_label(location, &out);
+                Ok(Self::UNIT.into())
+            }
         }
     }
 
@@ -259,61 +277,82 @@ impl<'a> Generator<'a> {
         label
     }
 
-    pub fn emit_label(&mut self, location: &Location, label: Var) {
+    pub fn emit_label(&mut self, location: &Location, label: impl Into<Label>) {
         self.ins.push(Instruction {
             location: location.clone(),
-            op: Op::Label(label),
+            op: Op::Label(label.into()),
         });
     }
 
-    pub fn emit_load_int_const(&mut self, location: &Location, value: Int, dest: Var) {
+    pub fn emit_load_int_const(&mut self, location: &Location, value: Int, dest: impl Into<Var>) {
         self.ins.push(Instruction {
             location: location.clone(),
-            op: Op::LoadIntConst { value, dest },
+            op: Op::LoadIntConst {
+                value,
+                dest: dest.into(),
+            },
         });
     }
 
-    pub fn emit_load_bool_const(&mut self, location: &Location, value: bool, dest: Var) {
+    pub fn emit_load_bool_const(&mut self, location: &Location, value: bool, dest: impl Into<Var>) {
         self.ins.push(Instruction {
             location: location.clone(),
-            op: Op::LoadBoolConst { value, dest },
+            op: Op::LoadBoolConst {
+                value,
+                dest: dest.into(),
+            },
         });
     }
 
-    pub fn emit_copy(&mut self, location: &Location, source: Var, dest: Var) {
+    pub fn emit_copy(&mut self, location: &Location, source: impl Into<Var>, dest: impl Into<Var>) {
         self.ins.push(Instruction {
             location: location.clone(),
-            op: Op::Copy { source, dest },
+            op: Op::Copy {
+                source: source.into(),
+                dest: dest.into(),
+            },
         });
     }
 
-    pub fn emit_call(&mut self, location: &Location, fun: Var, args: Vec<Var>, dest: Var) {
+    pub fn emit_call(
+        &mut self,
+        location: &Location,
+        fun: impl Into<String>,
+        args: impl IntoIterator<Item = impl Into<Var>>,
+        dest: impl Into<Var>,
+    ) {
         self.ins.push(Instruction {
             location: location.clone(),
-            op: Op::Call { fun, args, dest },
+            op: Op::Call {
+                fun: fun.into(),
+                args: args.into_iter().map(Into::into).collect(),
+                dest: dest.into(),
+            },
         });
     }
 
-    pub fn emit_jump(&mut self, location: &Location, label: Var) {
+    pub fn emit_jump(&mut self, location: &Location, label: impl Into<Label>) {
         self.ins.push(Instruction {
             location: location.clone(),
-            op: Op::Jump { label },
+            op: Op::Jump {
+                label: label.into(),
+            },
         });
     }
 
     pub fn emit_cond_jump(
         &mut self,
         location: &Location,
-        cond: Var,
-        then_label: Var,
-        else_label: Var,
+        cond: impl Into<Var>,
+        then_label: impl Into<Label>,
+        else_label: impl Into<Label>,
     ) {
         self.ins.push(Instruction {
             location: location.clone(),
             op: Op::CondJump {
-                cond,
-                then_label,
-                else_label,
+                cond: cond.into(),
+                then_label: then_label.into(),
+                else_label: else_label.into(),
             },
         });
     }
@@ -334,15 +373,15 @@ pub fn generate_ir<'a>(
     match generator.type_of(&var_final_result) {
         Type::Int => generator.emit_call(
             &Location::default(),
-            "print_int".into(),
-            vec![var_final_result],
-            Generator::UNIT.into(),
+            "print_int",
+            &[var_final_result],
+            Generator::UNIT,
         ),
         Type::Bool => generator.emit_call(
             &Location::default(),
-            "print_bool".into(),
-            vec![var_final_result],
-            Generator::UNIT.into(),
+            "print_bool",
+            &[var_final_result],
+            Generator::UNIT,
         ),
         Type::Unit => {}
         Type::Fun { .. } => unreachable!("Function values are not supported"),
