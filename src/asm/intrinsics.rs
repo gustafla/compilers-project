@@ -73,10 +73,7 @@ pub fn intrinsics() -> HashMap<&'static str, Emitter> {
         (Operator::Lt.function_name(Ary::Binary), binary_lt),
         (Operator::Geq.function_name(Ary::Binary), binary_ge),
         (Operator::Gt.function_name(Ary::Binary), binary_gt),
-        // (Operator::And.function_name(Ary::Binary), todo!()),
-        // (Operator::Or.function_name(Ary::Binary), todo!()),
         (Operator::Not.function_name(Ary::Unary), unary_not),
-        // (Operator::Assign.function_name(Ary::Binary), todo!()),
     ])
 }
 

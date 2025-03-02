@@ -280,14 +280,9 @@ impl<'a> Generator<'a> {
                     }
                     // Otherwise emit Call
                     op => {
-                        let fun = self
-                            .symtab
-                            .resolve(op.function_name(Ary::Binary))?
-                            .get()
-                            .clone();
-
+                        let fun = op.function_name(Ary::Binary);
                         let var_right = self.visit(&binary_op.right)?;
-                        self.emit_call(location, &fun, &[var_left, var_right], &var_result);
+                        self.emit_call(location, fun, &[var_left, var_right], &var_result);
                     }
                 }
                 Ok(var_result)
