@@ -217,7 +217,17 @@ impl<'a> Generator<'a> {
                 Ok(Self::UNIT.into())
             }
             Expression::BinaryOp(binary_op) => {
-                // TODO: Special case for =
+                if binary_op.op == Operator::Assign {
+                    // Resolve identifier
+                    let key = match binary_op.left.tree.as_ref() {
+                        Expression::Identifier(identifier) => identifier.name,
+                        _ => unreachable!("= requires identifier on the lhs"),
+                    };
+                    let var_left = self.symtab.resolve(key)?.get().clone();
+                    let var_right = self.visit(&binary_op.right)?;
+                    self.emit_copy(location, &var_right, &var_left);
+                    return Ok(Self::UNIT.into());
+                }
 
                 let var_left = self.visit(&binary_op.left)?;
                 let var_result = self.new_var(ty);
@@ -232,7 +242,6 @@ impl<'a> Generator<'a> {
                         match op {
                             Operator::And => {
                                 // Negate left
-                                // TODO: This can be done without calling unary_not, just flip the yup and nope -branches
                                 let not_fun = self
                                     .symtab
                                     .resolve(Operator::Not.function_name(Ary::Unary))?
