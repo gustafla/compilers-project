@@ -46,7 +46,7 @@ impl Display for Expression<'_> {
     }
 }
 
-pub type Int = i64;
+pub type Int = i128;
 
 #[derive(Debug, PartialEq)]
 pub enum Literal<'a> {
