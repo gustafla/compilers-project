@@ -255,43 +255,26 @@ impl<'a> Generator<'a> {
                 match binary_op.op {
                     // Special cases for short-circuiting and and or
                     op @ (Operator::And | Operator::Or) => {
-                        let yup = self.new_label();
-                        let nope = self.new_label();
+                        let short_circuit_label = self.new_label();
+                        let check_rhs_label = self.new_label();
                         let end = self.new_label();
 
-                        match op {
-                            Operator::And => {
-                                // Negate left
-                                let not_fun = self
-                                    .funtab
-                                    .resolve(Operator::Not.function_name(Ary::Unary))?
-                                    .get()
-                                    .clone();
-                                let not_left = self.new_var(&Type::Bool);
-                                self.emit_call(location, not_fun, [var_left], not_left);
-
-                                // Create conditional
-                                self.emit_cond_jump(location, not_left, yup, nope);
-
-                                // If left is false, short-circuit to false
-                                self.emit_label(location, yup);
-                                self.emit_load_bool_const(location, false, var_result);
-                                self.emit_jump(location, end);
-                            }
-                            Operator::Or => {
-                                // Create conditional
-                                self.emit_cond_jump(location, var_left, yup, nope);
-
-                                // If left is true, short-circuit to true
-                                self.emit_label(location, yup);
-                                self.emit_load_bool_const(location, true, var_result);
-                                self.emit_jump(location, end);
-                            }
+                        let (short_circuit_to, then_label, else_label) = match op {
+                            Operator::And => (false, check_rhs_label, short_circuit_label),
+                            Operator::Or => (true, short_circuit_label, check_rhs_label),
                             _ => unreachable!(),
-                        }
+                        };
 
-                        // Else check rhs
-                        self.emit_label(location, nope);
+                        // Create conditional
+                        self.emit_cond_jump(location, var_left, then_label, else_label);
+
+                        // Short-circuit branch
+                        self.emit_label(location, short_circuit_label);
+                        self.emit_load_bool_const(location, short_circuit_to, var_result);
+                        self.emit_jump(location, end);
+
+                        // Check rhs branch
+                        self.emit_label(location, check_rhs_label);
                         let var_right = self.visit(&binary_op.right)?;
                         self.emit_copy(location, var_right, var_result);
 
