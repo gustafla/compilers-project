@@ -383,11 +383,11 @@ fn parse_factor<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Result<Ast<'a>, Erro
         for parse_fn in [
             parse_block,
             parse_literal,
-            parse_fn_call,
             parse_conditional,
             parse_while,
             parse_break,
             parse_continue,
+            parse_fn_call,
         ] {
             if let Some(res) = parse_fn(tokens, at) {
                 return res;

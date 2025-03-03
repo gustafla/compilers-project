@@ -1,0 +1,12 @@
+var i = 1;
+while i < 10 do {
+    var j = 1;
+    while j < 10 do {
+        j = j + 1;
+        if (i * j) % 7 != 0 then {
+            continue;
+        }
+        print_int(i * j);
+    }
+    i = i + 1;
+}
