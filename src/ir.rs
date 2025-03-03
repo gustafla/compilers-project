@@ -12,8 +12,8 @@ pub enum Error {
     UnresolvedIdentifier(#[from] symtab::Error),
 }
 
-pub type Var = String;
-pub type Label = String;
+pub type Var = u32;
+pub type Label = u32;
 
 #[derive(Debug)]
 pub enum Op {
@@ -54,36 +54,40 @@ impl Display for Op {
         };
         match self {
             Op::Label(label) => {
-                write!(f, "{label}:")
+                if *label == 0 {
+                    write!(f, "Lstart:")
+                } else {
+                    write!(f, "L{label}:")
+                }
             }
             Op::LoadBoolConst { value, dest } => {
-                write!(f, "LoadBoolConst({value}, {dest})")
+                write!(f, "LoadBoolConst({value}, x{dest})")
             }
             Op::LoadIntConst { value, dest } => {
-                write!(f, "LoadIntConst({value}, {dest})")
+                write!(f, "LoadIntConst({value}, x{dest})")
             }
             Op::Copy { source, dest } => {
-                write!(f, "Copy({source}, {dest})")
+                write!(f, "Copy(x{source}, x{dest})")
             }
             Op::Call { fun, args, dest } => {
                 write!(f, "Call({fun}, [")?;
                 if let [a0, rest @ ..] = args.as_slice() {
-                    write!(f, "{a0}")?;
+                    write!(f, "x{a0}")?;
                     for arg in rest {
-                        write!(f, ", {arg}")?;
+                        write!(f, ", x{arg}")?;
                     }
                 }
-                write!(f, "], {dest})")
+                write!(f, "], x{dest})")
             }
             Op::Jump { label } => {
-                write!(f, "Jump({label})")
+                write!(f, "Jump(L{label})")
             }
             Op::CondJump {
                 cond,
                 then_label,
                 else_label,
             } => {
-                write!(f, "CondJump({cond}, {then_label}, {else_label})")
+                write!(f, "CondJump(x{cond}, L{then_label}, L{else_label})")
             }
         }
     }
@@ -98,8 +102,10 @@ struct Generator<'a> {
     // Counters for vars and labels
     var: u32,
     label: u32,
-    // Maps AST/source identifiers to IR variables
+    // Maps AST identifiers to IR variables
     symtab: SymbolTable<'a, Var>,
+    // Tracks AST function identifiers
+    funtab: SymbolTable<'a, String>,
     // Maps IR variables to types
     var_types: HashMap<Var, Type>,
     // Output IR instructions
@@ -107,24 +113,38 @@ struct Generator<'a> {
 }
 
 impl<'a> Generator<'a> {
-    const UNIT: &'static str = "unit";
+    const UNIT: Var = 0;
 
     pub fn new(root_types: &[(&'a str, Type)]) -> Self {
-        let root_vars: Vec<(&str, Var)> = root_types
+        let root_funs: Vec<(&str, String)> = root_types
             .iter()
-            .map(|(k, _)| (*k, Var::from(*k)))
+            .filter(|(_, ty)| matches!(ty, Type::Fun { .. }))
+            .map(|(k, _)| (*k, String::from(*k)))
             .collect();
-        let symtab = SymbolTable::from(root_vars);
+        let funtab = SymbolTable::from(root_funs);
+
+        let mut var_types = HashMap::from([(Self::UNIT, Type::Unit)]);
+        let mut symtab = SymbolTable::new();
+        let mut var = 1; // Var(0) is UNIT
+        for (id, ty) in root_types
+            .iter()
+            .filter(|(_, ty)| !matches!(ty, Type::Fun { .. }))
+        {
+            symtab.insert(id, var);
+            var_types.insert(var, ty.clone());
+            var += 1;
+        }
 
         Self {
-            var: 0,
-            label: 0,
+            var,
+            label: 1, // Label(0) is start
             symtab,
+            funtab,
             ins: vec![Instruction {
                 location: Location::default(),
-                op: Op::Label(Label::from("start")),
+                op: Op::Label(0), // start
             }],
-            var_types: HashMap::from([(Self::UNIT.into(), Type::Unit)]),
+            var_types,
         }
     }
 
@@ -135,86 +155,86 @@ impl<'a> Generator<'a> {
             Expression::Literal(literal) => match literal {
                 Literal::Int(value) => {
                     let var = self.new_var(&Type::Int);
-                    self.emit_load_int_const(location, *value, &var);
+                    self.emit_load_int_const(location, *value, var);
                     Ok(var)
                 }
                 Literal::Bool(value) => {
                     let var = self.new_var(&Type::Bool);
-                    self.emit_load_bool_const(location, *value, &var);
+                    self.emit_load_bool_const(location, *value, var);
                     Ok(var)
                 }
                 Literal::Str(_) => unimplemented!("String literals are not supported"),
             },
-            Expression::Identifier(identifier) => {
-                Ok(self.symtab.resolve(identifier.name)?.get().clone())
-            }
+            Expression::Identifier(identifier) => Ok(*self.symtab.resolve(identifier.name)?.get()),
             Expression::Conditional(conditional) => {
                 let then_label = self.new_label();
                 let else_label = self.new_label();
 
                 // Emit the main CondJump
                 let var_cond = self.visit(&conditional.condition)?;
-                self.emit_cond_jump(location, &var_cond, &then_label, &else_label);
+                self.emit_cond_jump(location, var_cond, then_label, else_label);
 
                 // Emit then-branch
-                self.emit_label(location, &then_label);
+                self.emit_label(location, then_label);
                 let var_result = self.visit(&conditional.then_expr)?;
 
                 if let Some(else_expr) = &conditional.else_expr {
                     // Copy result to var in both branches of the IR
                     let var_output = self.new_var(ty);
-                    self.emit_copy(location, &var_result, &var_output);
+                    self.emit_copy(location, var_result, var_output);
 
                     // Emit jump that ends the then-branch
                     let end_label = self.new_label();
-                    self.emit_jump(location, &end_label);
+                    self.emit_jump(location, end_label);
 
                     // Emit label that starts the else branch
-                    self.emit_label(location, &else_label);
+                    self.emit_label(location, else_label);
                     let var_result = self.visit(else_expr)?;
 
                     // Copy result to var in both branches of the IR
-                    self.emit_copy(location, &var_result, &var_output);
+                    self.emit_copy(location, var_result, var_output);
 
                     // Emit end label for the
-                    self.emit_label(location, &end_label);
+                    self.emit_label(location, end_label);
 
                     Ok(var_output)
                 } else {
                     // Use else-label as an end label as nothing gets emitted after it
-                    self.emit_label(location, &else_label);
-                    Ok(Self::UNIT.into())
+                    self.emit_label(location, else_label);
+                    Ok(Self::UNIT)
                 }
             }
             Expression::FnCall(fn_call) => {
-                let fun = self.symtab.resolve(fn_call.function.name)?.get().clone();
+                let fun = self.funtab.resolve(fn_call.function.name)?.get().clone();
                 let mut args = Vec::new();
                 for arg in &fn_call.arguments {
                     args.push(self.visit(arg)?);
                 }
                 let dest = self.new_var(ty);
-                self.emit_call(location, &fun, &args, &dest);
+                self.emit_call(location, fun, args, dest);
                 Ok(dest)
             }
             Expression::Block(block) => {
                 self.symtab.push();
+                self.funtab.push();
                 for expr in &block.expressions {
                     self.visit(expr)?;
                 }
                 let result = if let Some(result) = &block.result {
                     self.visit(result)?
                 } else {
-                    Self::UNIT.into()
+                    Self::UNIT
                 };
                 self.symtab.pop();
+                self.funtab.pop();
                 Ok(result)
             }
             Expression::Var(var) => {
                 let init = self.visit(&var.init)?;
                 let ir_var = self.new_var(var.init.ty.as_ref().unwrap());
-                self.symtab.insert(var.id.name, ir_var.clone());
-                self.emit_copy(location, &init, &ir_var);
-                Ok(Self::UNIT.into())
+                self.symtab.insert(var.id.name, ir_var);
+                self.emit_copy(location, init, ir_var);
+                Ok(Self::UNIT)
             }
             Expression::BinaryOp(binary_op) => {
                 if binary_op.op == Operator::Assign {
@@ -223,9 +243,9 @@ impl<'a> Generator<'a> {
                         Expression::Identifier(identifier) => identifier.name,
                         _ => unreachable!("= requires identifier on the lhs"),
                     };
-                    let var_left = self.symtab.resolve(key)?.get().clone();
+                    let var_left = *self.symtab.resolve(key)?.get();
                     let var_right = self.visit(&binary_op.right)?;
-                    self.emit_copy(location, &var_right, &var_left);
+                    self.emit_copy(location, var_right, var_left);
                     return Ok(var_right);
                 }
 
@@ -243,59 +263,59 @@ impl<'a> Generator<'a> {
                             Operator::And => {
                                 // Negate left
                                 let not_fun = self
-                                    .symtab
+                                    .funtab
                                     .resolve(Operator::Not.function_name(Ary::Unary))?
                                     .get()
                                     .clone();
                                 let not_left = self.new_var(&Type::Bool);
-                                self.emit_call(location, not_fun, &[var_left.clone()], &not_left);
+                                self.emit_call(location, not_fun, [var_left], not_left);
 
                                 // Create conditional
-                                self.emit_cond_jump(location, not_left, &yup, &nope);
+                                self.emit_cond_jump(location, not_left, yup, nope);
 
                                 // If left is false, short-circuit to false
-                                self.emit_label(location, &yup);
-                                self.emit_load_bool_const(location, false, &var_result);
-                                self.emit_jump(location, &end);
+                                self.emit_label(location, yup);
+                                self.emit_load_bool_const(location, false, var_result);
+                                self.emit_jump(location, end);
                             }
                             Operator::Or => {
                                 // Create conditional
-                                self.emit_cond_jump(location, var_left, &yup, &nope);
+                                self.emit_cond_jump(location, var_left, yup, nope);
 
                                 // If left is true, short-circuit to true
-                                self.emit_label(location, &yup);
-                                self.emit_load_bool_const(location, true, &var_result);
-                                self.emit_jump(location, &end);
+                                self.emit_label(location, yup);
+                                self.emit_load_bool_const(location, true, var_result);
+                                self.emit_jump(location, end);
                             }
                             _ => unreachable!(),
                         }
 
                         // Else check rhs
-                        self.emit_label(location, &nope);
+                        self.emit_label(location, nope);
                         let var_right = self.visit(&binary_op.right)?;
-                        self.emit_copy(location, &var_right, &var_result);
+                        self.emit_copy(location, var_right, var_result);
 
                         // End
-                        self.emit_label(location, &end);
+                        self.emit_label(location, end);
                     }
                     // Otherwise emit Call
                     op => {
                         let fun = op.function_name(Ary::Binary);
                         let var_right = self.visit(&binary_op.right)?;
-                        self.emit_call(location, fun, &[var_left, var_right], &var_result);
+                        self.emit_call(location, fun, [var_left, var_right], var_result);
                     }
                 }
                 Ok(var_result)
             }
             Expression::UnaryOp(unary_op) => {
                 let fun = self
-                    .symtab
+                    .funtab
                     .resolve(unary_op.op.function_name(Ary::Unary))?
                     .get()
                     .clone();
                 let var_right = self.visit(&unary_op.right)?;
                 let var_result = self.new_var(ty);
-                self.emit_call(location, &fun, &[var_right], &var_result);
+                self.emit_call(location, fun, [var_right], var_result);
                 Ok(var_result)
             }
             Expression::While(while_loop) => {
@@ -303,34 +323,34 @@ impl<'a> Generator<'a> {
                 let body = self.new_label();
                 let out = self.new_label();
 
-                self.emit_label(location, &start);
+                self.emit_label(location, start);
                 let cond = self.visit(&while_loop.condition)?;
-                self.emit_cond_jump(location, &cond, &body, &out);
-                self.emit_label(location, &body);
+                self.emit_cond_jump(location, cond, body, out);
+                self.emit_label(location, body);
                 self.visit(&while_loop.do_expr)?;
-                self.emit_jump(location, &start);
-                self.emit_label(location, &out);
-                Ok(Self::UNIT.into())
+                self.emit_jump(location, start);
+                self.emit_label(location, out);
+                Ok(Self::UNIT)
             }
         }
     }
 
-    pub fn type_of(&self, key: &str) -> &Type {
-        match self.var_types.get(key) {
+    pub fn type_of(&self, key: Var) -> &Type {
+        match self.var_types.get(&key) {
             Some(ty) => ty,
             None => panic!("Var {key} has no type info. This is a bug."),
         }
     }
 
     pub fn new_var(&mut self, ty: &Type) -> Var {
-        let var = format!("x{}", self.var);
+        let var = self.var;
         self.var += 1;
-        self.var_types.insert(var.clone(), ty.clone());
+        self.var_types.insert(var, ty.clone());
         var
     }
 
     pub fn new_label(&mut self) -> Label {
-        let label = format!("L{}", self.label);
+        let label = self.label;
         self.label += 1;
         label
     }
@@ -376,14 +396,14 @@ impl<'a> Generator<'a> {
         &mut self,
         location: &Location,
         fun: impl Into<String>,
-        args: impl IntoIterator<Item = impl Into<Var>>,
+        args: impl IntoIterator<Item = Var>,
         dest: impl Into<Var>,
     ) {
         self.ins.push(Instruction {
             location: location.clone(),
             op: Op::Call {
                 fun: fun.into(),
-                args: args.into_iter().map(Into::into).collect(),
+                args: args.into_iter().collect(),
                 dest: dest.into(),
             },
         });
@@ -428,17 +448,17 @@ pub fn generate_ir<'a>(
 ) -> Result<Vec<Instruction>, Error> {
     let mut generator = Generator::new(root_types);
     let var_final_result = generator.visit(ast)?;
-    match generator.type_of(&var_final_result) {
+    match generator.type_of(var_final_result) {
         Type::Int => generator.emit_call(
             &Location::default(),
             "print_int",
-            &[var_final_result],
+            [var_final_result],
             Generator::UNIT,
         ),
         Type::Bool => generator.emit_call(
             &Location::default(),
             "print_bool",
-            &[var_final_result],
+            [var_final_result],
             Generator::UNIT,
         ),
         Type::Unit => {}

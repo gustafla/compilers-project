@@ -34,14 +34,14 @@ impl Locals {
             match &insn.op {
                 ir::Op::Label(_) => {}
                 ir::Op::LoadBoolConst { dest, .. } => {
-                    set.insert(dest.clone());
+                    set.insert(*dest);
                 }
                 ir::Op::LoadIntConst { dest, .. } => {
-                    set.insert(dest.clone());
+                    set.insert(*dest);
                 }
                 ir::Op::Copy { source, dest } => {
-                    set.insert(source.clone());
-                    set.insert(dest.clone());
+                    set.insert(*source);
+                    set.insert(*dest);
                 }
                 ir::Op::Call {
                     /*fun, */ args,
@@ -49,13 +49,13 @@ impl Locals {
                     ..
                 } => {
                     for arg in args {
-                        set.insert(arg.clone());
+                        set.insert(*arg);
                     }
-                    set.insert(dest.clone());
+                    set.insert(*dest);
                 }
                 ir::Op::Jump { .. } => {}
                 ir::Op::CondJump { cond, .. } => {
-                    set.insert(cond.clone());
+                    set.insert(*cond);
                 }
             }
         }

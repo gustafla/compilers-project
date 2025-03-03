@@ -1,9 +1,9 @@
 - [X] Assembly generator
-  - [ ] Corner cases like assignment, and, or
+  - [X] Corner cases like assignment, and, or
   - [X] Error handling for asm::assembler
 - [X] IR generator
-  - [ ] Corner cases like assignment
-  - [ ] Make Vars and Labels integer-based
+  - [X] Corner cases like assignment
+  - [X] Make Vars and Labels integer-based
   - [ ] Tests for IR generator
 - [ ] Add function support
 - [ ] Add break and continue support
@@ -14,3 +14,4 @@
   - [ ] Add tests for type checker
 - [X] Parser
   - [X] Add tests for parser
+- [ ] Assign function to var
