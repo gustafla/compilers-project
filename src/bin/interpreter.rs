@@ -211,6 +211,8 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
             }
             Value::Unit
         }
+        Expression::Break => todo!(),
+        Expression::Continue => todo!(),
     }
 }
 

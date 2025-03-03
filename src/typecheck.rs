@@ -221,6 +221,8 @@ fn visit<'a>(ast: &mut Ast<'a>, symtab: &mut SymbolTable<'a, Type>) -> Result<Ty
             visit(&mut while_loop.do_expr, symtab)?;
             Type::Unit
         }
+        Expression::Break => Type::Unit,
+        Expression::Continue => Type::Unit,
     };
     ast.ty = Some(typ.clone());
     Ok(typ)

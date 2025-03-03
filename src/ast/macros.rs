@@ -129,8 +129,22 @@ macro_rules! var {
     };
 }
 
+macro_rules! brk {
+    () => {
+        ast! {Expression::Break}
+    };
+}
+
+macro_rules! cnt {
+    () => {
+        ast! {Expression::Continue}
+    };
+}
+
 pub(crate) use ast;
 pub(crate) use blk;
+pub(crate) use brk;
+pub(crate) use cnt;
 pub(crate) use con;
 pub(crate) use fal;
 pub(crate) use fun;

@@ -1,0 +1,7 @@
+var x = 0;
+while true do {
+    if x >= 10 then break;
+    x = x + 1;
+    if x % 2 == 0 then continue;
+    print_int(x);
+}

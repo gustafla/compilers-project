@@ -10,10 +10,20 @@ use thiserror::Error;
 pub enum Error {
     #[error(transparent)]
     UnresolvedIdentifier(#[from] symtab::Error),
+    #[error("`break` used outside of loop")]
+    BreakOutOfLoop,
+    #[error("`continue` used outside of loop")]
+    ContinueOutOfLoop,
 }
 
 pub type Var = u32;
 pub type Label = u32;
+
+#[derive(Clone)]
+struct LoopLabels {
+    pub start: Label,
+    pub end: Label,
+}
 
 #[derive(Debug)]
 pub enum Op {
@@ -148,7 +158,7 @@ impl<'a> Generator<'a> {
         }
     }
 
-    pub fn visit(&mut self, ast: &Ast<'a>) -> Result<Var, Error> {
+    pub fn visit(&mut self, ast: &Ast<'a>, in_loop: Option<&LoopLabels>) -> Result<Var, Error> {
         let location = &ast.location;
         let ty = ast.ty.as_ref().expect("AST should have been type checked");
         match ast.tree.as_ref() {
@@ -171,12 +181,12 @@ impl<'a> Generator<'a> {
                 let else_label = self.new_label();
 
                 // Emit the main CondJump
-                let var_cond = self.visit(&conditional.condition)?;
+                let var_cond = self.visit(&conditional.condition, in_loop)?;
                 self.emit_cond_jump(location, var_cond, then_label, else_label);
 
                 // Emit then-branch
                 self.emit_label(location, then_label);
-                let var_result = self.visit(&conditional.then_expr)?;
+                let var_result = self.visit(&conditional.then_expr, in_loop)?;
 
                 if let Some(else_expr) = &conditional.else_expr {
                     // Copy result to var in both branches of the IR
@@ -189,7 +199,7 @@ impl<'a> Generator<'a> {
 
                     // Emit label that starts the else branch
                     self.emit_label(location, else_label);
-                    let var_result = self.visit(else_expr)?;
+                    let var_result = self.visit(else_expr, in_loop)?;
 
                     // Copy result to var in both branches of the IR
                     self.emit_copy(location, var_result, var_output);
@@ -208,7 +218,7 @@ impl<'a> Generator<'a> {
                 let fun = self.funtab.resolve(fn_call.function.name)?.get().clone();
                 let mut args = Vec::new();
                 for arg in &fn_call.arguments {
-                    args.push(self.visit(arg)?);
+                    args.push(self.visit(arg, in_loop)?);
                 }
                 let dest = self.new_var(ty);
                 self.emit_call(location, fun, args, dest);
@@ -218,10 +228,10 @@ impl<'a> Generator<'a> {
                 self.symtab.push();
                 self.funtab.push();
                 for expr in &block.expressions {
-                    self.visit(expr)?;
+                    self.visit(expr, in_loop)?;
                 }
                 let result = if let Some(result) = &block.result {
-                    self.visit(result)?
+                    self.visit(result, in_loop)?
                 } else {
                     Self::UNIT
                 };
@@ -230,7 +240,7 @@ impl<'a> Generator<'a> {
                 Ok(result)
             }
             Expression::Var(var) => {
-                let init = self.visit(&var.init)?;
+                let init = self.visit(&var.init, in_loop)?;
                 let ir_var = self.new_var(var.init.ty.as_ref().unwrap());
                 self.symtab.insert(var.id.name, ir_var);
                 self.emit_copy(location, init, ir_var);
@@ -244,12 +254,12 @@ impl<'a> Generator<'a> {
                         _ => unreachable!("= requires identifier on the lhs"),
                     };
                     let var_left = *self.symtab.resolve(key)?.get();
-                    let var_right = self.visit(&binary_op.right)?;
+                    let var_right = self.visit(&binary_op.right, in_loop)?;
                     self.emit_copy(location, var_right, var_left);
                     return Ok(var_right);
                 }
 
-                let var_left = self.visit(&binary_op.left)?;
+                let var_left = self.visit(&binary_op.left, in_loop)?;
                 let var_result = self.new_var(ty);
 
                 match binary_op.op {
@@ -275,7 +285,7 @@ impl<'a> Generator<'a> {
 
                         // Check rhs branch
                         self.emit_label(location, check_rhs_label);
-                        let var_right = self.visit(&binary_op.right)?;
+                        let var_right = self.visit(&binary_op.right, in_loop)?;
                         self.emit_copy(location, var_right, var_result);
 
                         // End
@@ -284,7 +294,7 @@ impl<'a> Generator<'a> {
                     // Otherwise emit Call
                     op => {
                         let fun = op.function_name(Ary::Binary);
-                        let var_right = self.visit(&binary_op.right)?;
+                        let var_right = self.visit(&binary_op.right, in_loop)?;
                         self.emit_call(location, fun, [var_left, var_right], var_result);
                     }
                 }
@@ -296,7 +306,7 @@ impl<'a> Generator<'a> {
                     .resolve(unary_op.op.function_name(Ary::Unary))?
                     .get()
                     .clone();
-                let var_right = self.visit(&unary_op.right)?;
+                let var_right = self.visit(&unary_op.right, in_loop)?;
                 let var_result = self.new_var(ty);
                 self.emit_call(location, fun, [var_right], var_result);
                 Ok(var_result)
@@ -304,15 +314,30 @@ impl<'a> Generator<'a> {
             Expression::While(while_loop) => {
                 let start = self.new_label();
                 let body = self.new_label();
-                let out = self.new_label();
+                let end = self.new_label();
 
                 self.emit_label(location, start);
-                let cond = self.visit(&while_loop.condition)?;
-                self.emit_cond_jump(location, cond, body, out);
+                let cond = self.visit(&while_loop.condition, in_loop)?;
+                self.emit_cond_jump(location, cond, body, end);
                 self.emit_label(location, body);
-                self.visit(&while_loop.do_expr)?;
+                let new_loop = LoopLabels { start, end };
+                self.visit(&while_loop.do_expr, Some(&new_loop))?;
                 self.emit_jump(location, start);
-                self.emit_label(location, out);
+                self.emit_label(location, end);
+                Ok(Self::UNIT)
+            }
+            Expression::Break => {
+                match in_loop {
+                    Some(LoopLabels { end, .. }) => self.emit_jump(location, *end),
+                    None => return Err(Error::BreakOutOfLoop),
+                }
+                Ok(Self::UNIT)
+            }
+            Expression::Continue => {
+                match in_loop {
+                    Some(LoopLabels { start, .. }) => self.emit_jump(location, *start),
+                    None => return Err(Error::ContinueOutOfLoop),
+                }
                 Ok(Self::UNIT)
             }
         }
@@ -430,7 +455,7 @@ pub fn generate_ir<'a>(
     root_types: &[(&'a str, Type)],
 ) -> Result<Vec<Instruction>, Error> {
     let mut generator = Generator::new(root_types);
-    let var_final_result = generator.visit(ast)?;
+    let var_final_result = generator.visit(ast, None)?;
     match generator.type_of(var_final_result) {
         Type::Int => generator.emit_call(
             &Location::default(),

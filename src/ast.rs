@@ -24,6 +24,8 @@ pub enum Expression<'a> {
     BinaryOp(BinaryOp<'a>),
     UnaryOp(UnaryOp<'a>),
     While(While<'a>),
+    Break,
+    Continue,
 }
 
 impl Display for Expression<'_> {
@@ -41,6 +43,8 @@ impl Display for Expression<'_> {
                 Expression::BinaryOp(_) => "binary operation",
                 Expression::UnaryOp(_) => "unary operation",
                 Expression::While(_) => "while loop",
+                Expression::Break => "break statement",
+                Expression::Continue => "continue statement",
             }
         )
     }

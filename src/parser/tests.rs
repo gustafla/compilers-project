@@ -64,6 +64,10 @@ impl PartialEq for Expression<'_> {
                 a.init == b.init
             }
             (E::Var(..), _) => false,
+            (E::Break, E::Break) => true,
+            (E::Break, _) => false,
+            (E::Continue, E::Continue) => true,
+            (E::Continue, _) => false,
         }
     }
 }
@@ -796,4 +800,40 @@ fn var_typed() {
             var!(("x", Type::Int) = op!{int!(1), Operator::Add, int!(1)})
         }
     )
+}
+
+#[test]
+fn while_loop_break_continue() {
+    let code = "var x = 0; while true do {if x > 100 then break; x = x + 1; if x % 2 == 0 then continue; print_int(x);}";
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        blk! {
+            var!("x" = int!(0)),
+            whi! {
+                tru!(),
+                blk!{
+                    con! {
+                        op!(id!("x"), Operator::Gt, int!(100)),
+                        brk!(),
+                    };
+                    op! {
+                        id!("x"),
+                        Operator::Assign,
+                        op!{
+                            id!("x"),
+                            Operator::Add,
+                            int!(1)
+                        }
+                    };
+                    con! {
+                        op!(op!(id!("x"), Operator::Rem, int!(2)), Operator::Eq, int!(0)),
+                        cnt!(),
+                    };
+                    fun!("print_int", id!("x"));
+                }
+            }
+        }
+    );
 }
