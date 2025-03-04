@@ -3,8 +3,8 @@ mod tests;
 use crate::{
     Location, Type,
     ast::{
-        Ast, BinaryOp, Block, Conditional, Expression, FnCall, Identifier, Int, Literal, Operator,
-        UnaryOp, Var, While, macros::ast,
+        Ast, BinaryOp, Block, Conditional, Expression, FnCall, Identifier, Int, Literal, Module,
+        Operator, UnaryOp, Var, While, macros::ast,
     },
     config,
     tokenizer::{Kind, Token, Tokens},
@@ -567,7 +567,7 @@ impl<'a, 'b> Tokens<'a> {
     }
 }
 
-pub fn parse<'a>(tokens: &Tokens<'a>) -> Result<Ast<'a>, Error> {
+pub fn parse<'a>(tokens: &Tokens<'a>) -> Result<Module<'a>, Error> {
     start_trace!("Parser");
     let mut at = 0;
     let root = parse_block_contents(tokens, &mut at, (Kind::End, "EOF"))?;
@@ -577,5 +577,8 @@ pub fn parse<'a>(tokens: &Tokens<'a>) -> Result<Ast<'a>, Error> {
         dbg!(&root);
     }
 
-    Ok(root)
+    Ok(Module {
+        functions: Vec::new(),
+        root,
+    })
 }

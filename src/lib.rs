@@ -15,7 +15,7 @@ pub use location::Location;
 pub use symtab::SymbolTable;
 pub use typecheck::Type;
 
-use std::sync::LazyLock;
+use std::{collections::HashMap, sync::LazyLock};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -121,19 +121,22 @@ pub fn generate_assembly(code: &str, config: &Config) -> Result<String, Error> {
     Ok(asm)
 }
 
-pub fn generate_ir(code: &str, config: &Config) -> Result<Vec<ir::Instruction>, Error> {
+pub fn generate_ir<'a>(
+    code: &'a str,
+    config: &Config,
+) -> Result<HashMap<&'a str, Vec<ir::Instruction<'a>>>, Error> {
     let ast = typecheck(code, config)?;
     let ins = ir::generate_ir(&ast, &ROOT_TYPES)?;
     Ok(ins)
 }
 
-pub fn typecheck<'a>(code: &'a str, config: &Config) -> Result<ast::Ast<'a>, Error> {
-    let mut ast = parse(code, config)?;
-    typecheck::typecheck(&mut ast, &ROOT_TYPES)?;
-    Ok(ast)
+pub fn typecheck<'a>(code: &'a str, config: &Config) -> Result<ast::Module<'a>, Error> {
+    let mut module = parse(code, config)?;
+    typecheck::typecheck(&mut module, &ROOT_TYPES)?;
+    Ok(module)
 }
 
-pub fn parse<'a>(code: &'a str, config: &Config) -> Result<ast::Ast<'a>, Error> {
+pub fn parse<'a>(code: &'a str, config: &Config) -> Result<ast::Module<'a>, Error> {
     let tokens = tokenize(code, config)?;
     let ast = parser::parse(&tokens)?;
     Ok(ast)

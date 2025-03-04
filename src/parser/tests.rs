@@ -79,12 +79,22 @@ impl PartialEq for Ast<'_> {
     }
 }
 
+impl PartialEq for Module<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        // Ignore functions for now (TODO: implement?)
+        self.root == other.root
+    }
+}
+
 #[test]
 fn basic() {
     let code = "1 + 1";
     let tokens = tokenizer::tokenize(code).unwrap();
     let expression = parse(&tokens).unwrap();
-    assert_eq!(expression, blk! {,op! {int!(1), Operator::Add, int!(1)}});
+    assert_eq!(
+        expression,
+        mdl! {blk! {,op! {int!(1), Operator::Add, int!(1)}}}
+    );
 }
 
 #[test]
@@ -102,15 +112,17 @@ fn precedence_basic() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                op! {
-                op! {
-                    int!(1),
+        mdl! {
+                blk! {,
+                    op! {
+                    op! {
+                        int!(1),
+                        Operator::Add,
+                        int!(2),
+                    },
                     Operator::Add,
-                    int!(2),
-                },
-                Operator::Add,
-                int!(3),
+                    int!(3),
+                }
             }
         }
     );
@@ -120,15 +132,17 @@ fn precedence_basic() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-            op! {
-                int!(1),
-                Operator::Add,
+        mdl! {
+            blk! {,
                 op! {
-                    int!(2),
-                    Operator::Mul,
-                    int!(3),
-                },
+                    int!(1),
+                    Operator::Add,
+                    op! {
+                        int!(2),
+                        Operator::Mul,
+                        int!(3),
+                    },
+                }
             }
         }
     );
@@ -141,15 +155,17 @@ fn paren() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                op! {
-                int!(1),
-                Operator::Add,
-                op! {
-                    int!(2),
+        mdl! {
+            blk! {,
+                    op! {
+                    int!(1),
                     Operator::Add,
-                    int!(3),
-                },
+                    op! {
+                        int!(2),
+                        Operator::Add,
+                        int!(3),
+                    },
+                }
             }
         }
     );
@@ -162,15 +178,17 @@ fn identifiers() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                op! {
-                id!("a"),
-                Operator::Add,
-                op! {
-                    id!("b"),
-                    Operator::Mul,
-                    id!("c"),
-                },
+        mdl! {
+            blk! {,
+                    op! {
+                    id!("a"),
+                    Operator::Add,
+                    op! {
+                        id!("b"),
+                        Operator::Mul,
+                        id!("c"),
+                    },
+                }
             }
         }
     );
@@ -183,13 +201,15 @@ fn conditional() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                con! {
-                id!("a"),
-                op! {
-                    int!(1),
-                    Operator::Add,
-                    int!(1)
+        mdl! {
+            blk! {,
+                    con! {
+                    id!("a"),
+                    op! {
+                        int!(1),
+                        Operator::Add,
+                        int!(1)
+                    }
                 }
             }
         }
@@ -203,15 +223,17 @@ fn binary_op_with_conditional() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                op! {
-                int!(1),
-                Operator::Add,
-                con! {
-                    tru!(),
-                    int!(2),
-                    int!(3),
-                },
+        mdl! {
+            blk! {,
+                    op! {
+                    int!(1),
+                    Operator::Add,
+                    con! {
+                        tru!(),
+                        int!(2),
+                        int!(3),
+                    },
+                }
             }
         }
     );
@@ -224,22 +246,24 @@ fn nested_conditional() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                con! {
-                con! {
-                    id!("condition"),
-                    id!("a"),
-                    id!("b"),
-                },
-                con! {
+        mdl! {
+            blk! {,
                     con! {
-                        id!("a"),
+                    con! {
+                        id!("condition"),
                         id!("a"),
                         id!("b"),
                     },
-                    int!(32),
-                    int!(42),
-                },
+                    con! {
+                        con! {
+                            id!("a"),
+                            id!("a"),
+                            id!("b"),
+                        },
+                        int!(32),
+                        int!(42),
+                    },
+                }
             }
         }
     );
@@ -252,11 +276,13 @@ fn fn_call() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                op! {
-                int!(5),
-                Operator::Sub,
-                fun!("add", int!(1), int!(1)),
+        mdl! {
+            blk! {,
+                    op! {
+                    int!(5),
+                    Operator::Sub,
+                    fun!("add", int!(1), int!(1)),
+                }
             }
         }
     );
@@ -269,14 +295,16 @@ fn nested_fn_call() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                fun!(
-                "printf",
-                st!(r#"Error at packet %d: %s (context: %s)\n"#),
-                id!("packet"),
-                fun!("SDL_GetError"),
-                fun!("describe_context", id!("context"))
-            )
+        mdl! {
+            blk! {,
+                    fun!(
+                    "printf",
+                    st!(r#"Error at packet %d: %s (context: %s)\n"#),
+                    id!("packet"),
+                    fun!("SDL_GetError"),
+                    fun!("describe_context", id!("context"))
+                )
+            }
         }
     )
 }
@@ -288,15 +316,17 @@ fn assignment() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                op! {
-                id!("a"),
-                Operator::Assign,
-                op! {
-                    id!("b"),
+        mdl! {
+            blk! {,
+                    op! {
+                    id!("a"),
                     Operator::Assign,
-                    id!("c"),
-                },
+                    op! {
+                        id!("b"),
+                        Operator::Assign,
+                        id!("c"),
+                    },
+                }
             }
         }
     );
@@ -309,30 +339,32 @@ fn complex() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                con! {
-                op! {
-                    tru!(),
-                    Operator::Or,
+        mdl! {
+            blk! {,
+                    con! {
                     op! {
-                        fal!(),
-                        Operator::And,
-                        id!("foo"),
+                        tru!(),
+                        Operator::Or,
+                        op! {
+                            fal!(),
+                            Operator::And,
+                            id!("foo"),
+                        },
                     },
-                },
-                op! {
-                    id!("a"),
-                    Operator::Assign,
                     op! {
-                        id!("b"),
+                        id!("a"),
                         Operator::Assign,
                         op! {
-                            int!(1),
-                            Operator::Add,
+                            id!("b"),
+                            Operator::Assign,
                             op! {
-                                int!(2),
-                                Operator::Mul,
-                                fun!("sqrt", int!(2)),
+                                int!(1),
+                                Operator::Add,
+                                op! {
+                                    int!(2),
+                                    Operator::Mul,
+                                    fun!("sqrt", int!(2)),
+                                }
                             }
                         }
                     }
@@ -349,11 +381,13 @@ fn unary() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                con! {
-                op!{Operator::Not, id!("foo")},
-                op!{Operator::Sub, int!(1)},
-                op!{Operator::Sub, int!(2)}
+        mdl! {
+            blk! {,
+                    con! {
+                    op!{Operator::Not, id!("foo")},
+                    op!{Operator::Sub, int!(1)},
+                    op!{Operator::Sub, int!(2)}
+                }
             }
         }
     )
@@ -366,11 +400,13 @@ fn nested_unary() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                con! {
-                op!{Operator::Not, op!{Operator::Not, op!{Operator::Not, op!{Operator::Not, id!("foo")}}}},
-                op!{Operator::Sub, op!{Operator::Sub, int!(1)}},
-                op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, int!(2)}}}}},
+        mdl! {
+            blk! {,
+                    con! {
+                    op!{Operator::Not, op!{Operator::Not, op!{Operator::Not, op!{Operator::Not, id!("foo")}}}},
+                    op!{Operator::Sub, op!{Operator::Sub, int!(1)}},
+                    op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, op!{Operator::Sub, int!(2)}}}}},
+                }
             }
         }
     );
@@ -383,76 +419,78 @@ fn precedence_complex() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                op! {Operator::Sub,
-                con! {
-                    tru!{},
-                    op! {
-                        id!("a"),
-                        Operator::Assign,
+        mdl! {
+            blk! {,
+                    op! {Operator::Sub,
+                    con! {
+                        tru!{},
                         op! {
+                            id!("a"),
+                            Operator::Assign,
                             op! {
-                                int!(1),
-                                Operator::Or,
                                 op! {
                                     int!(1),
-                                    Operator::And,
+                                    Operator::Or,
                                     op! {
+                                        int!(1),
+                                        Operator::And,
                                         op! {
-                                            int!(1),
-                                            Operator::Eq,
-                                            int!(1),
-                                        },
-                                        Operator::Ne,
-                                        op ! {
                                             op! {
-                                                op! {
-                                                    op! {
-                                                        int!(1),
-                                                        Operator::Lt,
-                                                        int!(1),
-                                                    },
-                                                    Operator::Leq,
-                                                    int!(1),
-                                                },
-                                                Operator::Gt,
+                                                int!(1),
+                                                Operator::Eq,
                                                 int!(1),
                                             },
-                                            Operator::Geq,
-                                            op! {
-                                                op! {
-                                                    int!(1),
-                                                    Operator::Add,
-                                                    int!(1),
-                                                },
-                                                Operator::Sub,
+                                            Operator::Ne,
+                                            op ! {
                                                 op! {
                                                     op! {
                                                         op! {
                                                             int!(1),
-                                                            Operator::Mul,
+                                                            Operator::Lt,
                                                             int!(1),
                                                         },
-                                                        Operator::Div,
+                                                        Operator::Leq,
                                                         int!(1),
                                                     },
-                                                    Operator::Rem,
+                                                    Operator::Gt,
+                                                    int!(1),
+                                                },
+                                                Operator::Geq,
+                                                op! {
                                                     op! {
-                                                        Operator::Sub,
                                                         int!(1),
+                                                        Operator::Add,
+                                                        int!(1),
+                                                    },
+                                                    Operator::Sub,
+                                                    op! {
+                                                        op! {
+                                                            op! {
+                                                                int!(1),
+                                                                Operator::Mul,
+                                                                int!(1),
+                                                            },
+                                                            Operator::Div,
+                                                            int!(1),
+                                                        },
+                                                        Operator::Rem,
+                                                        op! {
+                                                            Operator::Sub,
+                                                            int!(1),
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
-                                    }
+                                    },
                                 },
-                            },
-                            Operator::Assign,
-                            id!("x")
-                        }
+                                Operator::Assign,
+                                id!("x")
+                            }
+                        },
+                        id!("xd")
                     },
-                    id!("xd")
-                },
+                }
             }
         }
     );
@@ -497,16 +535,18 @@ fn block() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                con! {
-                id!("ok"),
-                blk! {
-                    fun!("fn1");
-                    fun!("fn2");
-                    fun!("exit", int!(0));
-                },
-                blk! {
-                    , fun!("exit", int!(1))
+        mdl! {
+            blk! {,
+                    con! {
+                    id!("ok"),
+                    blk! {
+                        fun!("fn1");
+                        fun!("fn2");
+                        fun!("exit", int!(0));
+                    },
+                    blk! {
+                        , fun!("exit", int!(1))
+                    }
                 }
             }
         }
@@ -520,17 +560,19 @@ fn var() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                con! {
-                id!("ok"),
-                blk! {
-                    fun!("fn1");
-                    fun!("fn2");
-                    fun!("exit", int!(0));
-                },
-                blk! {
-                    var!("retval" = op!(id!("errno"), Operator::Add, int!(1)))
-                    , fun!("exit", id!("retval"))
+        mdl! {
+            blk! {,
+                    con! {
+                    id!("ok"),
+                    blk! {
+                        fun!("fn1");
+                        fun!("fn2");
+                        fun!("exit", int!(0));
+                    },
+                    blk! {
+                        var!("retval" = op!(id!("errno"), Operator::Add, int!(1)))
+                        , fun!("exit", id!("retval"))
+                    }
                 }
             }
         }
@@ -552,16 +594,18 @@ fn semicolons_omitted_in_nested_block() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                con! {
-                id!("ok"),
-                blk! {
-                    blk!{,fun!("fn1")};
-                    blk!{,fun!("fn2")};
-                    blk!{,fun!("exit", int!(0))};
-                },
-                blk! {
-                    , fun!("exit", int!(1))
+        mdl! {
+            blk! {,
+                    con! {
+                    id!("ok"),
+                    blk! {
+                        blk!{,fun!("fn1")};
+                        blk!{,fun!("fn2")};
+                        blk!{,fun!("exit", int!(0))};
+                    },
+                    blk! {
+                        , fun!("exit", int!(1))
+                    }
                 }
             }
         }
@@ -575,7 +619,7 @@ fn omitted_semicolon_case0() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,blk! { blk!{,id!("x")}, blk!{,id!("y")} }}
+        mdl! { blk! {,blk! { blk!{,id!("x")}, blk!{,id!("y")} }}}
     );
 
     let code = "{{a}{x}{y}}";
@@ -583,7 +627,7 @@ fn omitted_semicolon_case0() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,blk! { blk!{,id!("a")}; blk!{,id!("x")}, blk!{,id!("y")} }}
+        mdl! { blk! {,blk! { blk!{,id!("a")}; blk!{,id!("x")}, blk!{,id!("y")} }}}
     );
 }
 
@@ -602,13 +646,15 @@ fn omitted_semicolon_case2() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                blk! {
-                con!{
-                    tru!(),
-                    blk!{, id!("a")},
-                },
-                id!("b")
+        mdl! {
+            blk! {,
+                    blk! {
+                    con!{
+                        tru!(),
+                        blk!{, id!("a")},
+                    },
+                    id!("b")
+                }
             }
         }
     );
@@ -621,13 +667,15 @@ fn omitted_semicolon_case3() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                blk! {
-                con!{
-                    tru!(),
-                    blk!{, id!("a")},
-                },
-                id!("b")
+        mdl! {
+            blk! {,
+                    blk! {
+                    con!{
+                        tru!(),
+                        blk!{, id!("a")},
+                    },
+                    id!("b")
+                }
             }
         }
     );
@@ -648,14 +696,16 @@ fn omitted_semicolon_case5() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                blk! {
-                con!{
-                    tru!(),
-                    blk!{, id!("a")},
-                };
-                id!("b"),
-                id!("c")
+        mdl! {
+            blk! {,
+                    blk! {
+                    con!{
+                        tru!(),
+                        blk!{, id!("a")},
+                    };
+                    id!("b"),
+                    id!("c")
+                }
             }
         }
     );
@@ -668,14 +718,16 @@ fn omitted_semicolon_case6() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                blk! {
-                con!{
-                    tru!(),
-                    blk!{, id!("a")},
-                    blk!{, id!("b")},
-                },
-                id!("c")
+        mdl! {
+            blk! {,
+                    blk! {
+                    con!{
+                        tru!(),
+                        blk!{, id!("a")},
+                        blk!{, id!("b")},
+                    },
+                    id!("c")
+                }
             }
         }
     );
@@ -688,13 +740,15 @@ fn omitted_semicolon_case7() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                op! {
-                id!("x"),
-                Operator::Assign,
-                blk!{
-                    blk!{,fun!("f", id!("a"))},
-                    blk!{,id!("b")}
+        mdl! {
+            blk! {,
+                    op! {
+                    id!("x"),
+                    Operator::Assign,
+                    blk!{
+                        blk!{,fun!("f", id!("a"))},
+                        blk!{,id!("b")}
+                    }
                 }
             }
         }
@@ -708,15 +762,17 @@ fn deeply_nested_blocks() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-                blk! {
-                blk!{,id!("a")};
-                fun!("call");
-                blk!{,blk!{,blk!{,blk!{,id!("b")}}}},
-                con!{
-                    blk!{,blk!{,id!("c")}},
-                    blk!{,fun!("happy")},
-                    blk!{,fun!("edge_case")},
+        mdl! {
+            blk! {,
+                    blk! {
+                    blk!{,id!("a")};
+                    fun!("call");
+                    blk!{,blk!{,blk!{,blk!{,id!("b")}}}},
+                    con!{
+                        blk!{,blk!{,id!("c")}},
+                        blk!{,fun!("happy")},
+                        blk!{,fun!("edge_case")},
+                    }
                 }
             }
         }
@@ -730,14 +786,16 @@ fn root_level_block() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {
-            var!("x" = int!(0));
-            con!{
-                tru!(),
-                blk!{, id!("a")},
-            };
-            id!("b");
-            fun!("c", id!("x"));
+        mdl! {
+            blk! {
+                var!("x" = int!(0));
+                con!{
+                    tru!(),
+                    blk!{, id!("a")},
+                };
+                id!("b");
+                fun!("c", id!("x"));
+            }
         }
     );
 }
@@ -749,14 +807,16 @@ fn root_level_block2() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {
-            var!("x" = blk!{,op!{int!(1), Operator::Add, int!(1)}});
-            con!{
-                tru!(),
-                blk!{, id!("a")},
-            };
-            id!("b"),
-            fun!("c", id!("x"))
+        mdl! {
+            blk! {
+                var!("x" = blk!{,op!{int!(1), Operator::Add, int!(1)}});
+                con!{
+                    tru!(),
+                    blk!{, id!("a")},
+                };
+                id!("b"),
+                fun!("c", id!("x"))
+            }
         }
     );
 }
@@ -768,21 +828,23 @@ fn while_loop() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {
-            var!("x" = int!(0)),
-            whi! {
-                tru!(),
-                blk!{
-                    op! {
-                        id!("x"),
-                        Operator::Assign,
-                        op!{
+        mdl! {
+            blk! {
+                var!("x" = int!(0)),
+                whi! {
+                    tru!(),
+                    blk!{
+                        op! {
                             id!("x"),
-                            Operator::Add,
-                            int!(1)
-                        }
-                    },
-                    fun!("print_int", id!("x"))
+                            Operator::Assign,
+                            op!{
+                                id!("x"),
+                                Operator::Add,
+                                int!(1)
+                            }
+                        },
+                        fun!("print_int", id!("x"))
+                    }
                 }
             }
         }
@@ -796,8 +858,10 @@ fn var_typed() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {,
-            var!(("x", Type::Int) = op!{int!(1), Operator::Add, int!(1)})
+        mdl! {
+            blk! {,
+                var!(("x", Type::Int) = op!{int!(1), Operator::Add, int!(1)})
+            }
         }
     )
 }
@@ -809,29 +873,31 @@ fn while_loop_break_continue() {
     let expression = parse(&tokens).unwrap();
     assert_eq!(
         expression,
-        blk! {
-            var!("x" = int!(0)),
-            whi! {
-                tru!(),
-                blk!{
-                    con! {
-                        op!(id!("x"), Operator::Gt, int!(100)),
-                        brk!(),
-                    };
-                    op! {
-                        id!("x"),
-                        Operator::Assign,
-                        op!{
+        mdl! {
+            blk! {
+                var!("x" = int!(0)),
+                whi! {
+                    tru!(),
+                    blk!{
+                        con! {
+                            op!(id!("x"), Operator::Gt, int!(100)),
+                            brk!(),
+                        };
+                        op! {
                             id!("x"),
-                            Operator::Add,
-                            int!(1)
-                        }
-                    };
-                    con! {
-                        op!(op!(id!("x"), Operator::Rem, int!(2)), Operator::Eq, int!(0)),
-                        cnt!(),
-                    };
-                    fun!("print_int", id!("x"));
+                            Operator::Assign,
+                            op!{
+                                id!("x"),
+                                Operator::Add,
+                                int!(1)
+                            }
+                        };
+                        con! {
+                            op!(op!(id!("x"), Operator::Rem, int!(2)), Operator::Eq, int!(0)),
+                            cnt!(),
+                        };
+                        fun!("print_int", id!("x"));
+                    }
                 }
             }
         }

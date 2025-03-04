@@ -7,6 +7,26 @@ use crate::{Location, Type};
 pub use op::Operator;
 
 #[derive(Debug)]
+pub struct Argument<'a> {
+    pub identifier: Identifier<'a>,
+    pub ty: Type,
+}
+
+#[derive(Debug)]
+pub struct Function<'a> {
+    pub identifier: Identifier<'a>,
+    pub arguments: Vec<Argument<'a>>,
+    pub returns: Type,
+    pub ast: Ast<'a>,
+}
+
+#[derive(Debug)]
+pub struct Module<'a> {
+    pub functions: Vec<Function<'a>>,
+    pub root: Ast<'a>,
+}
+
+#[derive(Debug)]
 pub struct Ast<'a> {
     pub location: Location,
     pub ty: Option<Type>,

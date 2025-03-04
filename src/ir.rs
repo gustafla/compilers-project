@@ -1,6 +1,6 @@
 use crate::{
     Location, SymbolTable, Type,
-    ast::{Ast, Expression, Int, Literal, Operator, op::Ary},
+    ast::{Ast, Expression, Int, Literal, Module, Operator, op::Ary},
     symtab,
 };
 use std::{collections::HashMap, fmt::Display};
@@ -26,7 +26,7 @@ struct LoopLabels {
 }
 
 #[derive(Debug)]
-pub enum Op {
+pub enum Op<'a> {
     Label(Label),
     LoadBoolConst {
         value: bool,
@@ -41,7 +41,7 @@ pub enum Op {
         dest: Var,
     },
     Call {
-        fun: String,
+        fun: &'a str,
         args: Vec<Var>,
         dest: Var,
     },
@@ -55,7 +55,7 @@ pub enum Op {
     },
 }
 
-impl Display for Op {
+impl Display for Op<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Indent, but not labels and nops
         match self {
@@ -103,9 +103,9 @@ impl Display for Op {
     }
 }
 
-pub struct Instruction {
+pub struct Instruction<'a> {
     pub location: Location,
-    pub op: Op,
+    pub op: Op<'a>,
 }
 
 struct Generator<'a> {
@@ -115,21 +115,21 @@ struct Generator<'a> {
     // Maps AST identifiers to IR variables
     symtab: SymbolTable<'a, Var>,
     // Tracks AST function identifiers
-    funtab: SymbolTable<'a, String>,
+    funtab: SymbolTable<'a, &'a str>,
     // Maps IR variables to types
     var_types: HashMap<Var, Type>,
     // Output IR instructions
-    ins: Vec<Instruction>,
+    ins: Vec<Instruction<'a>>,
 }
 
 impl<'a> Generator<'a> {
     const UNIT: Var = 0;
 
     pub fn new(root_types: &[(&'a str, Type)]) -> Self {
-        let root_funs: Vec<(&str, String)> = root_types
+        let root_funs: Vec<(&str, &str)> = root_types
             .iter()
             .filter(|(_, ty)| matches!(ty, Type::Fun { .. }))
-            .map(|(k, _)| (*k, String::from(*k)))
+            .map(|(k, _)| (*k, *k))
             .collect();
         let funtab = SymbolTable::from(root_funs);
 
@@ -215,7 +215,7 @@ impl<'a> Generator<'a> {
                 }
             }
             Expression::FnCall(fn_call) => {
-                let fun = self.funtab.resolve(fn_call.function.name)?.get().clone();
+                let fun = *self.funtab.resolve(fn_call.function.name)?.get();
                 let mut args = Vec::new();
                 for arg in &fn_call.arguments {
                     args.push(self.visit(arg, in_loop)?);
@@ -301,11 +301,10 @@ impl<'a> Generator<'a> {
                 Ok(var_result)
             }
             Expression::UnaryOp(unary_op) => {
-                let fun = self
+                let fun = *self
                     .funtab
                     .resolve(unary_op.op.function_name(Ary::Unary))?
-                    .get()
-                    .clone();
+                    .get();
                 let var_right = self.visit(&unary_op.right, in_loop)?;
                 let var_result = self.new_var(ty);
                 self.emit_call(location, fun, [var_right], var_result);
@@ -403,14 +402,14 @@ impl<'a> Generator<'a> {
     pub fn emit_call(
         &mut self,
         location: &Location,
-        fun: impl Into<String>,
+        fun: &'a str,
         args: impl IntoIterator<Item = Var>,
         dest: impl Into<Var>,
     ) {
         self.ins.push(Instruction {
             location: location.clone(),
             op: Op::Call {
-                fun: fun.into(),
+                fun,
                 args: args.into_iter().collect(),
                 dest: dest.into(),
             },
@@ -444,18 +443,18 @@ impl<'a> Generator<'a> {
     }
 }
 
-impl From<Generator<'_>> for Vec<Instruction> {
-    fn from(val: Generator<'_>) -> Self {
-        val.ins
+impl<'a> From<Generator<'a>> for HashMap<&'a str, Vec<Instruction<'a>>> {
+    fn from(val: Generator<'a>) -> Self {
+        Self::from([("main", val.ins)])
     }
 }
 
 pub fn generate_ir<'a>(
-    ast: &Ast<'a>,
+    module: &Module<'a>,
     root_types: &[(&'a str, Type)],
-) -> Result<Vec<Instruction>, Error> {
+) -> Result<HashMap<&'a str, Vec<Instruction<'a>>>, Error> {
     let mut generator = Generator::new(root_types);
-    let var_final_result = generator.visit(ast, None)?;
+    let var_final_result = generator.visit(&module.root, None)?;
     match generator.type_of(var_final_result) {
         Type::Int => generator.emit_call(
             &Location::default(),

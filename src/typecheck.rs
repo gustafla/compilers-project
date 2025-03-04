@@ -1,6 +1,6 @@
 use crate::{
     SymbolTable,
-    ast::{Ast, Expression, Literal, Operator, op::Ary},
+    ast::{Ast, Expression, Literal, Module, Operator, op::Ary},
     trace::{end_trace, start_trace, traceln},
 };
 use std::{fmt::Display, str::FromStr};
@@ -228,10 +228,13 @@ fn visit<'a>(ast: &mut Ast<'a>, symtab: &mut SymbolTable<'a, Type>) -> Result<Ty
     Ok(typ)
 }
 
-pub fn typecheck<'a>(ast: &mut Ast<'a>, root_types: &[(&'a str, Type)]) -> Result<Type, Error> {
+pub fn typecheck<'a>(
+    module: &mut Module<'a>,
+    root_types: &[(&'a str, Type)],
+) -> Result<Type, Error> {
     start_trace!("Type checker");
     let mut symtab = SymbolTable::from(root_types.to_owned());
-    let res = visit(ast, &mut symtab);
+    let res = visit(&mut module.root, &mut symtab);
     end_trace!();
     res
 }

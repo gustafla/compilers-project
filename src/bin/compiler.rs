@@ -52,11 +52,14 @@ fn print_ir(code: &str, config: &compiler::Config) {
         Ok(ir) => ir,
         Err(ref e) => err!(e),
     };
-    for ins in ir {
-        if let compiler::ir::Op::Label(_) = ins.op {
-            println!();
+    for (fun, ins) in ir {
+        println!("\n{fun}:");
+        for insn in ins {
+            if let compiler::ir::Op::Label(_) = insn.op {
+                println!();
+            }
+            println!("{}", insn.op);
         }
-        println!("{}", ins.op);
     }
 }
 

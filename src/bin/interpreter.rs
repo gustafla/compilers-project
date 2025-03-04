@@ -237,7 +237,7 @@ fn main() {
         Err(ref e) => err!(e),
     };
 
-    let ast = match parse(&code, &cli.config) {
+    let module = match parse(&code, &cli.config) {
         Ok(ast) => ast,
         Err(ref e) => err!(e),
     };
@@ -323,7 +323,7 @@ fn main() {
         ),
     ]);
 
-    let code = match interpret(&ast, &mut symtab) {
+    let code = match interpret(&module.root, &mut symtab) {
         Value::Int(i) => i.clamp(0, 255) as i32,
         Value::Bool(b) => {
             if b {

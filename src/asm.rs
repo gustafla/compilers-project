@@ -90,10 +90,10 @@ macro_rules! emit_ind {
 }
 pub(crate) use emit_ind;
 
-pub fn generate_assembly(ins: &[ir::Instruction]) -> String {
+pub fn generate_assembly<'a>(ins: &HashMap<&'a str, Vec<ir::Instruction<'a>>>) -> String {
     let mut out = String::new();
 
-    let locals = Locals::new(ins);
+    let locals = Locals::new(ins["main"].as_slice());
     let intrinsics = intrinsics::intrinsics();
 
     emit_ind!(out, ".extern print_int");
@@ -109,7 +109,7 @@ pub fn generate_assembly(ins: &[ir::Instruction]) -> String {
     emit_ind!(out, "movq %rsp, %rbp");
     emit_ind!(out, "subq ${}, %rsp", locals.stack_used());
 
-    for insn in ins {
+    for insn in ins["main"].as_slice() {
         if let ir::Op::Label(..) = insn.op {
             emit!(out, "");
         } else {
@@ -136,7 +136,7 @@ pub fn generate_assembly(ins: &[ir::Instruction]) -> String {
                 emit_ind!(out, "movq %rax, {}", locals.get_ref(dest));
             }
             ir::Op::Call { fun, args, dest } => {
-                if let Some(intrinsic) = intrinsics.get(fun.as_str()) {
+                if let Some(intrinsic) = intrinsics.get(fun) {
                     let arg_refs: Vec<&str> = args.iter().map(|a| locals.get_ref(a)).collect();
                     intrinsic(intrinsics::Args {
                         arg_refs: &arg_refs,
