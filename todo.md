@@ -27,6 +27,7 @@
   - [X] Make Vars and Labels integer-based
   - [ ] Tests for IR generator
 - [X] Add break and continue support
+  - [X] In the interpreter too
 - [X] Type checker
   - [ ] Add tests for type checker
 - [X] Parser

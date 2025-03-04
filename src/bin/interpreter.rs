@@ -95,12 +95,19 @@ impl From<&Literal<'_>> for Value {
     }
 }
 
-fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
+// std::ops::ControlFlow isn't sufficient
+#[derive(Debug)]
+enum LoopControl {
+    Continue,
+    Break,
+}
+
+fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Result<Value, LoopControl> {
     match ast.tree.as_ref() {
-        Expression::Literal(literal) => literal.into(),
-        Expression::Identifier(identifier) => resolve!(symtab, identifier.name).get().clone(),
+        Expression::Literal(literal) => Ok(literal.into()),
+        Expression::Identifier(identifier) => Ok(resolve!(symtab, identifier.name).get().clone()),
         Expression::Conditional(conditional) => {
-            let Value::Bool(condition) = interpret(&conditional.condition, symtab) else {
+            let Value::Bool(condition) = interpret(&conditional.condition, symtab)? else {
                 panic!("if requires a boolean expression");
             };
             if condition {
@@ -108,40 +115,40 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
             } else if let Some(else_expr) = &conditional.else_expr {
                 interpret(else_expr, symtab)
             } else {
-                Value::Unit
+                Ok(Value::Unit)
             }
         }
         Expression::FnCall(fn_call) => {
             let key = fn_call.function.name;
             let mut args: Vec<Value> = Vec::new();
             for arg in &fn_call.arguments {
-                args.push(interpret(arg, symtab));
+                args.push(interpret(arg, symtab)?);
             }
             match resolve!(symtab, key).get() {
-                Value::Fun(f) => f(&args),
+                Value::Fun(f) => Ok(f(&args)),
                 _ => panic!("{} is not a function", key),
             }
         }
         Expression::Block(block) => {
             symtab.push();
             for expr in &block.expressions {
-                interpret(expr, symtab);
+                interpret(expr, symtab)?;
             }
             let result = if let Some(expr) = &block.result {
-                interpret(expr, symtab)
+                interpret(expr, symtab)?
             } else {
                 Value::Unit
             };
             symtab.pop();
-            result
+            Ok(result)
         }
         Expression::Var(var) => {
             let key = var.id.name;
-            let value = interpret(&var.init, symtab);
+            let value = interpret(&var.init, symtab)?;
             if symtab.insert(key, value).is_some() {
                 panic!("Identifier {key} is already defined (can't shadow in the same scope)");
             };
-            Value::Unit
+            Ok(Value::Unit)
         }
         Expression::BinaryOp(binary_op) => {
             // Special case: Assignment
@@ -150,19 +157,19 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
                     Expression::Identifier(identifier) => identifier.name,
                     _ => panic!("= requires identifier on the lhs"),
                 };
-                let value = interpret(&binary_op.right, symtab);
+                let value = interpret(&binary_op.right, symtab)?;
                 resolve!(symtab, key).insert(value.clone());
-                return value;
+                return Ok(value);
             }
 
             // Interpret lhs
-            let a = interpret(&binary_op.left, symtab);
+            let a = interpret(&binary_op.left, symtab)?;
 
             // Short-circuit and
             if binary_op.op == Operator::And {
                 if let Value::Bool(a) = a {
                     if !a {
-                        return Value::Bool(false);
+                        return Ok(Value::Bool(false));
                     }
                 }
             }
@@ -171,22 +178,22 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
             if binary_op.op == Operator::Or {
                 if let Value::Bool(a) = a {
                     if a {
-                        return Value::Bool(true);
+                        return Ok(Value::Bool(true));
                     }
                 }
             }
 
             // Interpret rhs
-            let b = interpret(&binary_op.right, symtab);
+            let b = interpret(&binary_op.right, symtab)?;
 
             // Special cases: Eq and Ne
             match (&a, binary_op.op, &b) {
-                (Value::Int(a), Operator::Eq, Value::Int(b)) => return Value::Bool(a == b),
-                (Value::Bool(a), Operator::Eq, Value::Bool(b)) => return Value::Bool(a == b),
-                (Value::Unit, Operator::Eq, Value::Unit) => return Value::Bool(true),
-                (Value::Int(a), Operator::Ne, Value::Int(b)) => return Value::Bool(a != b),
-                (Value::Bool(a), Operator::Ne, Value::Bool(b)) => return Value::Bool(a != b),
-                (Value::Unit, Operator::Ne, Value::Unit) => return Value::Bool(false),
+                (Value::Int(a), Operator::Eq, Value::Int(b)) => return Ok(Value::Bool(a == b)),
+                (Value::Bool(a), Operator::Eq, Value::Bool(b)) => return Ok(Value::Bool(a == b)),
+                (Value::Unit, Operator::Eq, Value::Unit) => return Ok(Value::Bool(true)),
+                (Value::Int(a), Operator::Ne, Value::Int(b)) => return Ok(Value::Bool(a != b)),
+                (Value::Bool(a), Operator::Ne, Value::Bool(b)) => return Ok(Value::Bool(a != b)),
+                (Value::Unit, Operator::Ne, Value::Unit) => return Ok(Value::Bool(false)),
                 (_, op @ (Operator::Eq | Operator::Ne), _) => {
                     panic!(
                         "Invalid arguments to {op}, expected to have same type between operands",
@@ -196,23 +203,35 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Value {
             };
 
             // Delegate rest to builtins
-            call!(symtab, binary_op.op.function_name(Ary::Binary), &[a, b])
+            Ok(call!(
+                symtab,
+                binary_op.op.function_name(Ary::Binary),
+                &[a, b]
+            ))
         }
         Expression::UnaryOp(unary_op) => {
-            let value = interpret(&unary_op.right, symtab);
-            call!(symtab, unary_op.op.function_name(Ary::Unary), &[value])
+            let value = interpret(&unary_op.right, symtab)?;
+            Ok(call!(
+                symtab,
+                unary_op.op.function_name(Ary::Unary),
+                &[value]
+            ))
         }
         Expression::While(node) => {
-            while match interpret(&node.condition, symtab) {
+            while match interpret(&node.condition, symtab)? {
                 Value::Bool(condition) => condition,
                 _ => panic!("while requires a boolean condition"),
             } {
-                interpret(&node.do_expr, symtab);
+                match interpret(&node.do_expr, symtab) {
+                    Ok(_) => {}
+                    Err(LoopControl::Continue) => continue,
+                    Err(LoopControl::Break) => break,
+                }
             }
-            Value::Unit
+            Ok(Value::Unit)
         }
-        Expression::Break => todo!(),
-        Expression::Continue => todo!(),
+        Expression::Break => Err(LoopControl::Break),
+        Expression::Continue => Err(LoopControl::Continue),
     }
 }
 
@@ -323,17 +342,9 @@ fn main() {
         ),
     ]);
 
-    let code = match interpret(&module.root, &mut symtab) {
-        Value::Int(i) => i.clamp(0, 255) as i32,
-        Value::Bool(b) => {
-            if b {
-                0
-            } else {
-                1
-            }
-        }
-        _ => 0,
+    match interpret(&module.root, &mut symtab) {
+        Ok(Value::Int(i)) => call!(symtab, "print_int", &[Value::Int(i)]),
+        Ok(Value::Bool(b)) => call!(symtab, "print_bool", &[Value::Bool(b)]),
+        _ => Value::Unit,
     };
-
-    std::process::exit(code);
 }
