@@ -3,8 +3,8 @@ mod tests;
 use crate::{
     Location, Type,
     ast::{
-        Ast, BinaryOp, Block, Conditional, Expression, FnCall, Identifier, Int, Literal, Module,
-        Operator, UnaryOp, Var, While, macros::ast,
+        Ast, BinaryOp, Block, Conditional, Expression, FnCall, Function, Identifier, Int, Literal,
+        Module, Operator, Parameter, UnaryOp, Var, While, macros::ast,
     },
     config,
     tokenizer::{Kind, Token, Tokens},
@@ -46,6 +46,8 @@ pub enum Error {
         token: String,
         source: ParseIntError,
     },
+    #[error("Function {fun:?} definition is not followed by a block")]
+    FunDefBlock { fun: String },
 }
 
 fn parse_op(tokens: &Tokens<'_>, at: &mut usize) -> Result<Operator, Error> {
@@ -266,18 +268,114 @@ fn parse_fn_call<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'
     }))
 }
 
+fn parse_fun<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Function<'a>, Error>> {
+    let ((t0, s0), (t1, _)) = (tokens.peek(at), tokens.peek_ahead(at));
+    traceln!("parse_fun, token = {s0:?}");
+
+    // Check for "fun" followed by an identifier
+    match (t0.kind(), s0, t1.kind()) {
+        (Kind::Identifier, "fun", Kind::Identifier) => {}
+        _ => return None,
+    }
+
+    // Consume "fun"
+    tokens.consume(at);
+
+    // Parse identifier
+    let id = parse_identifier(tokens, at).map(|ast| *ast.tree);
+    let Some(Expression::Identifier(identifier)) = id else {
+        unreachable!("Token should have been be an identifier");
+    };
+
+    // Consume opening paren
+    match tokens.consume_expect(at, (Kind::Punctuation, "(")) {
+        Ok(_) => {}
+        Err(e) => return Some(Err(e)),
+    }
+
+    // Parse parameters
+    let mut parameters = Vec::new();
+    loop {
+        // Parse identifier
+        let (token, _) = tokens.peek(at);
+        let id = parse_identifier(tokens, at).map(|ast| *ast.tree);
+        let Some(Expression::Identifier(identifier)) = id else {
+            return Some(Err(Error::ExpectedIdentifier(token.kind())));
+        };
+
+        // Consume colon before parameter type
+        match tokens.consume_expect(at, (Kind::Punctuation, ":")) {
+            Ok(_) => {}
+            Err(e) => return Some(Err(e)),
+        }
+
+        // Consume parameter type
+        let ty = match tokens.consume(at) {
+            (token, fragment) if token.kind() == Kind::Identifier => match Type::from_str(fragment)
+            {
+                Ok(ty) => ty,
+                Err(s) => return Some(Err(Error::Type(s))),
+            },
+            (token, _) => return Some(Err(Error::ExpectedType(token.kind()))),
+        };
+
+        parameters.push(Parameter { identifier, ty });
+
+        // Parameter ends in comma or closing paren
+        match tokens.consume_expect(at, (Kind::Punctuation, ",")) {
+            Ok(_) => {}
+            Err(e) => match tokens.consume_expect(at, (Kind::Punctuation, ")")) {
+                Ok(_) => break,
+                Err(_) => return Some(Err(e)),
+            },
+        }
+    }
+
+    // Consume colon before return type
+    match tokens.consume_expect(at, (Kind::Punctuation, ":")) {
+        Ok(_) => {}
+        Err(e) => return Some(Err(e)),
+    }
+
+    // Consume return type
+    let returns = match tokens.consume(at) {
+        (token, fragment) if token.kind() == Kind::Identifier => match Type::from_str(fragment) {
+            Ok(ty) => ty,
+            Err(s) => return Some(Err(Error::Type(s))),
+        },
+        (token, _) => return Some(Err(Error::ExpectedType(token.kind()))),
+    };
+
+    let body = match parse_block(tokens, at) {
+        Some(Ok(ast)) => ast,
+        Some(Err(e)) => return Some(Err(e)),
+        None => {
+            return Some(Err(Error::FunDefBlock {
+                fun: String::from(identifier.name),
+            }));
+        }
+    };
+
+    Some(Ok(Function {
+        identifier,
+        parameters,
+        returns,
+        body,
+    }))
+}
+
 fn parse_block<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
     if tokens.consume_expect(at, (Kind::Punctuation, "{")).is_err() {
         return None;
     };
 
-    Some(parse_block_contents(tokens, at, (Kind::Punctuation, "}")))
+    Some(parse_block_contents(tokens, at, None))
 }
 
 fn parse_block_contents<'a>(
     tokens: &Tokens<'a>,
     at: &mut usize,
-    end: (Kind, &str),
+    mut module: Option<&mut Module<'a>>,
 ) -> Result<Ast<'a>, Error> {
     let (token, fragment) = tokens.peek(at);
     let start = token.location().start();
@@ -286,7 +384,21 @@ fn parse_block_contents<'a>(
     let mut expressions = Vec::new();
     let mut result = None;
 
+    let end = match module {
+        Some(_) => (Kind::End, "EOF"),
+        None => (Kind::Punctuation, "}"),
+    };
+
     while tokens.consume_expect(at, end).is_err() {
+        // Only modules can contain function definitions
+        if let Some(module) = module.as_mut() {
+            match parse_fun(tokens, at) {
+                Some(Ok(fun)) => module.functions.push(fun),
+                Some(Err(e)) => return Err(e),
+                None => {}
+            }
+        }
+
         // Only blocks can contain variable declarations, try them first
         let ast = match parse_var(tokens, at) {
             Some(Ok(ast)) => ast,
@@ -309,9 +421,10 @@ fn parse_block_contents<'a>(
     }
 
     let end = tokens.peek_behind(at).0.location().end();
-    Ok(ast! {
+    let ast = ast! {
         (start..end).into() => Expression::Block(Block { expressions, result, })
-    })
+    };
+    Ok(ast)
 }
 
 fn parse_var<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
@@ -570,15 +683,14 @@ impl<'a, 'b> Tokens<'a> {
 pub fn parse<'a>(tokens: &Tokens<'a>) -> Result<Module<'a>, Error> {
     start_trace!("Parser");
     let mut at = 0;
-    let root = parse_block_contents(tokens, &mut at, (Kind::End, "EOF"))?;
+
+    let mut module = Module::default();
+    module.main = Some(parse_block_contents(tokens, &mut at, Some(&mut module))?);
     end_trace!();
 
     if config::verbose() {
-        dbg!(&root);
+        dbg!(&module);
     }
 
-    Ok(Module {
-        functions: Vec::new(),
-        root,
-    })
+    Ok(module)
 }

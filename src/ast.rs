@@ -17,13 +17,13 @@ pub struct Function<'a> {
     pub identifier: Identifier<'a>,
     pub parameters: Vec<Parameter<'a>>,
     pub returns: Type,
-    pub ast: Ast<'a>,
+    pub body: Ast<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Module<'a> {
     pub functions: Vec<Function<'a>>,
-    pub root: Ast<'a>,
+    pub main: Option<Ast<'a>>,
 }
 
 #[derive(Debug)]

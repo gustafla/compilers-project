@@ -343,7 +343,7 @@ fn main() {
         ),
     ]);
 
-    match interpret(&module.root, &mut symtab) {
+    match interpret(module.main.as_ref().unwrap(), &mut symtab) {
         Ok(Value::Int(i)) => call!(symtab, "print_int", &[Value::Int(i)]),
         Ok(Value::Bool(b)) => call!(symtab, "print_bool", &[Value::Bool(b)]),
         _ => Value::Unit,

@@ -455,13 +455,14 @@ pub fn generate_ir<'a>(
 
     // Generate user-defined functions from module
     for fun in &module.functions {
-        generator.visit(&fun.ast, None)?;
+        generator.visit(&fun.body, None)?;
         funs.insert(fun.identifier.name, generator.take());
         // TODO: return values
     }
 
     // Generate main function from module root
-    let var_final_result = generator.visit(&module.root, None)?;
+    // TODO: modules without main
+    let var_final_result = generator.visit(module.main.as_ref().unwrap(), None)?;
     match generator.type_of(var_final_result) {
         Type::Int => generator.emit_call(
             &Location::default(),

@@ -84,7 +84,7 @@ impl PartialEq for Ast<'_> {
 impl PartialEq for Module<'_> {
     fn eq(&self, other: &Self) -> bool {
         // Ignore functions for now (TODO: implement?)
-        self.root == other.root
+        self.main == other.main
     }
 }
 

@@ -145,13 +145,13 @@ macro_rules! mdl {
     {$e: expr $(,)?} => {
         crate::ast::Module {
             functions: Vec::new(),
-            root: $e,
+            main: Some($e),
         }
     };
     {$($fun: expr),* => $e: expr} => {
         crate::ast::Module {
             functions: vec![$($fun),*],
-            root: $e,
+            main: Some($e),
         }
     };
 }
@@ -165,7 +165,7 @@ macro_rules! fun {
                 ty: $pty
             }),*],
             returns: $ty,
-            ast: $body,
+            body: $body,
         }
     };
 }

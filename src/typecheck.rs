@@ -235,7 +235,8 @@ pub fn typecheck<'a>(
 ) -> Result<Type, Error> {
     start_trace!("Type checker");
     let mut symtab = SymbolTable::from(root_types.to_owned());
-    let res = visit(&mut module.root, &mut symtab);
+    // TODO: check functions
+    let res = visit(module.main.as_mut().unwrap(), &mut symtab);
     end_trace!();
     res
 }
