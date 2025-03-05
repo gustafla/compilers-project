@@ -3,6 +3,7 @@ mod intrinsics;
 
 use crate::ir;
 pub use assembler::{Error, assemble};
+use intrinsics::Intrinsics;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write,
@@ -77,39 +78,33 @@ impl Locals {
 
 macro_rules! emit {
     ($out: expr, $($arg: tt)*) => {{
-        writeln!(&mut $out, $($arg)*).ok();
+        writeln!($out, $($arg)*).ok();
     }};
 }
 pub(crate) use emit;
 
 macro_rules! emit_ind {
     ($out: expr, $($arg: tt)*) => {{
-        write!(&mut $out, "    ").ok();
+        write!($out, "    ").ok();
         crate::asm::emit!($out, $($arg)*);
     }};
 }
 pub(crate) use emit_ind;
 
-pub fn generate_assembly<'a>(ins: &HashMap<&'a str, Vec<ir::Instruction<'a>>>) -> String {
-    let mut out = String::new();
-
-    let locals = Locals::new(ins["main"].as_slice());
-    let intrinsics = intrinsics::intrinsics();
-
-    emit_ind!(out, ".extern print_int");
-    emit_ind!(out, ".extern print_bool");
-    emit_ind!(out, ".extern read_int");
-    emit_ind!(out, ".global main");
-    emit_ind!(out, ".type main, @function");
+fn emit_function(
+    out: &mut String,
+    intrinsics: &Intrinsics,
+    fun: &str,
+    ins: &[ir::Instruction<'_>],
+) {
+    let locals = Locals::new(ins);
     emit!(out, "");
-    emit_ind!(out, ".section .text");
-    emit!(out, "");
-    emit!(out, "main:");
+    emit!(out, "{}:", fun);
     emit_ind!(out, "pushq %rbp");
     emit_ind!(out, "movq %rsp, %rbp");
     emit_ind!(out, "subq ${}, %rsp", locals.stack_used());
 
-    for insn in ins["main"].as_slice() {
+    for insn in ins {
         if let ir::Op::Label(..) = insn.op {
             emit!(out, "");
         } else {
@@ -136,30 +131,48 @@ pub fn generate_assembly<'a>(ins: &HashMap<&'a str, Vec<ir::Instruction<'a>>>) -
                 emit_ind!(out, "movq %rax, {}", locals.get_ref(dest));
             }
             ir::Op::Call { fun, args, dest } => {
+                // Emit intrinsic if defined
                 if let Some(intrinsic) = intrinsics.get(fun) {
                     let arg_refs: Vec<&str> = args.iter().map(|a| locals.get_ref(a)).collect();
                     intrinsic(intrinsics::Args {
                         arg_refs: &arg_refs,
                         result_register: "%rax",
-                        out: &mut out,
+                        out,
                     });
                     emit_ind!(out, "movq %rax, {}", locals.get_ref(dest));
                     continue;
                 }
 
+                // Set register arguments
                 for (reg, arg) in ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
                     .iter()
                     .zip(args.iter().take(6))
                 {
                     emit_ind!(out, "movq {}, {}", locals.get_ref(arg), reg);
                 }
-                let mut pushed = 0;
+
+                // Push stack arguments
+                let stack_args = args.iter().skip(6).count();
+                // If stack wouldn't be 16-byte aligned, insert alignment
+                let pushed = if stack_args % 2 != 0 {
+                    emit_ind!(out, "subq $8, %rsp");
+                    stack_args * 8 + 8
+                } else {
+                    stack_args * 8
+                };
                 for arg in args.iter().skip(6).rev() {
                     emit_ind!(out, "pushq {}", locals.get_ref(arg));
-                    pushed += 8;
                 }
+
+                // Call function
                 emit_ind!(out, "callq {}", fun);
-                emit_ind!(out, "addq ${}, %rsp", pushed);
+
+                // Pop stack arguments
+                if pushed != 0 {
+                    emit_ind!(out, "addq ${}, %rsp", pushed);
+                }
+
+                // Set return value to destination
                 emit_ind!(out, "movq %rax, {}", locals.get_ref(dest));
             }
             ir::Op::Jump { label } => {
@@ -180,6 +193,28 @@ pub fn generate_assembly<'a>(ins: &HashMap<&'a str, Vec<ir::Instruction<'a>>>) -
     emit_ind!(out, "movq %rbp, %rsp");
     emit_ind!(out, "popq %rbp");
     emit_ind!(out, "ret");
+}
+
+pub fn generate_assembly<'a>(funs: &HashMap<&'a str, Vec<ir::Instruction<'a>>>) -> String {
+    let mut out = String::new();
+
+    let intrinsics = intrinsics::intrinsics();
+
+    emit_ind!(out, ".extern print_int");
+    emit_ind!(out, ".extern print_bool");
+    emit_ind!(out, ".extern read_int");
+    emit_ind!(out, ".global main");
+
+    for fun in funs.keys() {
+        emit_ind!(out, ".type {}, @function", fun);
+    }
+
+    emit!(out, "");
+    emit_ind!(out, ".section .text");
+
+    for (fun, ins) in funs {
+        emit_function(&mut out, &intrinsics, fun, ins);
+    }
 
     out
 }

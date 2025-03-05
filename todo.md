@@ -1,7 +1,7 @@
 - [ ] Add function support
   - [X] Add module type
   - [ ] Add IR generation for functions
-  - [ ] Make assembly generator emit code for multiple functions
+  - [X] Make assembly generator emit code for multiple functions
     - Labels in functions must be unique within the module
   - [ ] Implement function parsing
   - [ ] Add user-defined functions in symbol tables
