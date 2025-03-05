@@ -42,6 +42,10 @@ impl<'a, T> SymbolTable<'a, T> {
         }
     }
 
+    pub fn depth(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn insert(&mut self, key: &'a str, value: T) -> Option<T> {
         self.0.last_mut().unwrap().insert(key, value)
     }

@@ -3,7 +3,7 @@ use crate::{
     ast::{Ast, Expression, Int, Literal, Module, Operator, op::Ary},
     symtab,
 };
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, mem};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -64,11 +64,7 @@ impl Display for Op<'_> {
         };
         match self {
             Op::Label(label) => {
-                if *label == 0 {
-                    write!(f, "Lstart:")
-                } else {
-                    write!(f, "L{label}:")
-                }
+                write!(f, "L{label}:")
             }
             Op::LoadBoolConst { value, dest } => {
                 write!(f, "LoadBoolConst({value}, x{dest})")
@@ -147,14 +143,11 @@ impl<'a> Generator<'a> {
 
         Self {
             var,
-            label: 1, // Label(0) is start
+            label: 0,
             symtab,
             funtab,
-            ins: vec![Instruction {
-                location: Location::default(),
-                op: Op::Label(0), // start
-            }],
             var_types,
+            ins: Vec::new(),
         }
     }
 
@@ -441,11 +434,14 @@ impl<'a> Generator<'a> {
             },
         });
     }
-}
 
-impl<'a> From<Generator<'a>> for HashMap<&'a str, Vec<Instruction<'a>>> {
-    fn from(val: Generator<'a>) -> Self {
-        Self::from([("main", val.ins)])
+    pub fn take(&mut self) -> Vec<Instruction<'a>> {
+        #[cfg(debug_assertions)]
+        {
+            assert_eq!(self.symtab.depth(), 1);
+            assert_eq!(self.funtab.depth(), 1);
+        }
+        mem::take(&mut self.ins)
     }
 }
 
@@ -453,7 +449,17 @@ pub fn generate_ir<'a>(
     module: &Module<'a>,
     root_types: &[(&'a str, Type)],
 ) -> Result<HashMap<&'a str, Vec<Instruction<'a>>>, Error> {
+    let mut funs = HashMap::new();
     let mut generator = Generator::new(root_types);
+
+    // Generate user-defined functions from module
+    for fun in &module.functions {
+        generator.visit(&fun.ast, None)?;
+        funs.insert(fun.identifier.name, generator.take());
+        // TODO: return values
+    }
+
+    // Generate main function from module root
     let var_final_result = generator.visit(&module.root, None)?;
     match generator.type_of(var_final_result) {
         Type::Int => generator.emit_call(
@@ -471,5 +477,7 @@ pub fn generate_ir<'a>(
         Type::Unit => {}
         Type::Fun { .. } => unreachable!("Function values are not supported"),
     }
-    Ok(generator.into())
+    funs.insert("main", generator.take());
+
+    Ok(funs)
 }
