@@ -85,9 +85,9 @@ macro_rules! fal {
     };
 }
 
-macro_rules! fun {
+macro_rules! cal {
     ($id: literal) => {
-        fun!($id,)
+        cal!($id,)
     };
     ($id: literal, $($arg: expr),*) => {
         ast! {crate::ast::Expression::FnCall(crate::ast::FnCall {
@@ -153,10 +153,10 @@ macro_rules! mdl {
 pub(crate) use ast;
 pub(crate) use blk;
 pub(crate) use brk;
+pub(crate) use cal;
 pub(crate) use cnt;
 pub(crate) use con;
 pub(crate) use fal;
-pub(crate) use fun;
 pub(crate) use id;
 pub(crate) use int;
 pub(crate) use mdl;

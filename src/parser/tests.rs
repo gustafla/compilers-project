@@ -281,7 +281,7 @@ fn fn_call() {
                     op! {
                     int!(5),
                     Operator::Sub,
-                    fun!("add", int!(1), int!(1)),
+                    cal!("add", int!(1), int!(1)),
                 }
             }
         }
@@ -297,12 +297,12 @@ fn nested_fn_call() {
         expression,
         mdl! {
             blk! {,
-                    fun!(
+                    cal!(
                     "printf",
                     st!(r#"Error at packet %d: %s (context: %s)\n"#),
                     id!("packet"),
-                    fun!("SDL_GetError"),
-                    fun!("describe_context", id!("context"))
+                    cal!("SDL_GetError"),
+                    cal!("describe_context", id!("context"))
                 )
             }
         }
@@ -363,7 +363,7 @@ fn complex() {
                                 op! {
                                     int!(2),
                                     Operator::Mul,
-                                    fun!("sqrt", int!(2)),
+                                    cal!("sqrt", int!(2)),
                                 }
                             }
                         }
@@ -540,12 +540,12 @@ fn block() {
                     con! {
                     id!("ok"),
                     blk! {
-                        fun!("fn1");
-                        fun!("fn2");
-                        fun!("exit", int!(0));
+                        cal!("fn1");
+                        cal!("fn2");
+                        cal!("exit", int!(0));
                     },
                     blk! {
-                        , fun!("exit", int!(1))
+                        , cal!("exit", int!(1))
                     }
                 }
             }
@@ -565,13 +565,13 @@ fn var() {
                     con! {
                     id!("ok"),
                     blk! {
-                        fun!("fn1");
-                        fun!("fn2");
-                        fun!("exit", int!(0));
+                        cal!("fn1");
+                        cal!("fn2");
+                        cal!("exit", int!(0));
                     },
                     blk! {
                         var!("retval" = op!(id!("errno"), Operator::Add, int!(1)))
-                        , fun!("exit", id!("retval"))
+                        , cal!("exit", id!("retval"))
                     }
                 }
             }
@@ -599,12 +599,12 @@ fn semicolons_omitted_in_nested_block() {
                     con! {
                     id!("ok"),
                     blk! {
-                        blk!{,fun!("fn1")};
-                        blk!{,fun!("fn2")};
-                        blk!{,fun!("exit", int!(0))};
+                        blk!{,cal!("fn1")};
+                        blk!{,cal!("fn2")};
+                        blk!{,cal!("exit", int!(0))};
                     },
                     blk! {
-                        , fun!("exit", int!(1))
+                        , cal!("exit", int!(1))
                     }
                 }
             }
@@ -746,7 +746,7 @@ fn omitted_semicolon_case7() {
                     id!("x"),
                     Operator::Assign,
                     blk!{
-                        blk!{,fun!("f", id!("a"))},
+                        blk!{,cal!("f", id!("a"))},
                         blk!{,id!("b")}
                     }
                 }
@@ -766,12 +766,12 @@ fn deeply_nested_blocks() {
             blk! {,
                     blk! {
                     blk!{,id!("a")};
-                    fun!("call");
+                    cal!("call");
                     blk!{,blk!{,blk!{,blk!{,id!("b")}}}},
                     con!{
                         blk!{,blk!{,id!("c")}},
-                        blk!{,fun!("happy")},
-                        blk!{,fun!("edge_case")},
+                        blk!{,cal!("happy")},
+                        blk!{,cal!("edge_case")},
                     }
                 }
             }
@@ -794,7 +794,7 @@ fn root_level_block() {
                     blk!{, id!("a")},
                 };
                 id!("b");
-                fun!("c", id!("x"));
+                cal!("c", id!("x"));
             }
         }
     );
@@ -815,7 +815,7 @@ fn root_level_block2() {
                     blk!{, id!("a")},
                 };
                 id!("b"),
-                fun!("c", id!("x"))
+                cal!("c", id!("x"))
             }
         }
     );
@@ -843,7 +843,7 @@ fn while_loop() {
                                 int!(1)
                             }
                         },
-                        fun!("print_int", id!("x"))
+                        cal!("print_int", id!("x"))
                     }
                 }
             }
@@ -896,7 +896,7 @@ fn while_loop_break_continue() {
                             op!(op!(id!("x"), Operator::Rem, int!(2)), Operator::Eq, int!(0)),
                             cnt!(),
                         };
-                        fun!("print_int", id!("x"));
+                        cal!("print_int", id!("x"));
                     }
                 }
             }
