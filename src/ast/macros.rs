@@ -148,6 +148,32 @@ macro_rules! mdl {
             root: $e,
         }
     };
+    {$($fun: expr),* => $e: expr} => {
+        crate::ast::Module {
+            functions: vec![$($fun),*],
+            root: $e,
+        }
+    };
+}
+
+macro_rules! fun {
+    ($id: literal ($($pid: literal = $pty: expr),*) -> $ty: expr, $body: expr) => {
+        crate::ast::Function {
+            identifier: crate::ast::Identifier { name: $id },
+            parameters: vec![$(crate::ast::Parameter {
+                identifier: crate::ast::Identifier {name: $pid},
+                ty: $pty
+            }),*],
+            returns: $ty,
+            ast: $body,
+        }
+    };
+}
+
+macro_rules! ret {
+    ($e: expr $(,)?) => {
+        ast! {crate::ast::Expression::Return($e)}
+    };
 }
 
 pub(crate) use ast;
@@ -157,10 +183,12 @@ pub(crate) use cal;
 pub(crate) use cnt;
 pub(crate) use con;
 pub(crate) use fal;
+pub(crate) use fun;
 pub(crate) use id;
 pub(crate) use int;
 pub(crate) use mdl;
 pub(crate) use op;
+pub(crate) use ret;
 pub(crate) use st;
 pub(crate) use tru;
 pub(crate) use var;

@@ -7,7 +7,7 @@ use crate::{Location, Type};
 pub use op::Operator;
 
 #[derive(Debug)]
-pub struct Argument<'a> {
+pub struct Parameter<'a> {
     pub identifier: Identifier<'a>,
     pub ty: Type,
 }
@@ -15,7 +15,7 @@ pub struct Argument<'a> {
 #[derive(Debug)]
 pub struct Function<'a> {
     pub identifier: Identifier<'a>,
-    pub arguments: Vec<Argument<'a>>,
+    pub parameters: Vec<Parameter<'a>>,
     pub returns: Type,
     pub ast: Ast<'a>,
 }
@@ -46,6 +46,7 @@ pub enum Expression<'a> {
     While(While<'a>),
     Break,
     Continue,
+    Return(Ast<'a>),
 }
 
 impl Display for Expression<'_> {
@@ -65,6 +66,7 @@ impl Display for Expression<'_> {
                 Expression::While(_) => "while loop",
                 Expression::Break => "break statement",
                 Expression::Continue => "continue statement",
+                Expression::Return(_) => "return statement",
             }
         )
     }

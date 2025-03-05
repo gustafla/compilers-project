@@ -68,6 +68,8 @@ impl PartialEq for Expression<'_> {
             (E::Break, _) => false,
             (E::Continue, E::Continue) => true,
             (E::Continue, _) => false,
+            (E::Return(a), E::Return(b)) => a == b,
+            (E::Return(_), _) => false,
         }
     }
 }
@@ -900,6 +902,28 @@ fn while_loop_break_continue() {
                     }
                 }
             }
+        }
+    );
+}
+
+#[test]
+fn function_definition() {
+    let code = r#"
+        fun square(x: Int): Int {
+            return x * x;
+        }
+
+        print_int(square(8));
+    "#;
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        mdl! {
+            fun!("square" ("x" = Type::Int) -> Type::Int, blk!{
+                ret!(op!{id!("x"), Operator::Mul, id!("x")});
+            })
+            => cal!("print_int", cal!("square", int!(8)))
         }
     );
 }

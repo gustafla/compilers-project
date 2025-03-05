@@ -332,6 +332,7 @@ impl<'a> Generator<'a> {
                 }
                 Ok(Self::UNIT)
             }
+            Expression::Return(ast) => todo!(),
         }
     }
 

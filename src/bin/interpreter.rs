@@ -232,6 +232,7 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Result<V
         }
         Expression::Break => Err(LoopControl::Break),
         Expression::Continue => Err(LoopControl::Continue),
+        Expression::Return(ast) => todo!(),
     }
 }
 

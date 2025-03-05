@@ -223,6 +223,7 @@ fn visit<'a>(ast: &mut Ast<'a>, symtab: &mut SymbolTable<'a, Type>) -> Result<Ty
         }
         Expression::Break => Type::Unit,
         Expression::Continue => Type::Unit,
+        Expression::Return(ast) => todo!(),
     };
     ast.ty = Some(typ.clone());
     Ok(typ)
