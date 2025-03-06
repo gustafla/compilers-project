@@ -4,12 +4,15 @@
   - [X] Make assembly generator emit code for multiple functions
     - [X] Labels in functions must be unique within the module
   - [X] Implement function parsing
-  - [ ] Add user-defined functions in symbol tables
-    - [ ] In the interpreter, map each user-defined function to a Python function that runs the interpreter on the user-defined function’s body
-    - [ ] In the type-checker, map each user-defined function to a function type based on the type annotations
+  - [X] Add user-defined functions in symbol tables
+    - [X] In the interpreter, map each user-defined function to a Python function that runs the interpreter on the user-defined function’s body
+    - [X] In the type-checker, map each user-defined function to a function type based on the type annotations
     - [ ] In the IR and Assembly generators, do the same as with built-in functions
   - [ ] Make incoming parameters available as variables in all stages that use a symbol table
-  - [ ] Change the type-checker, IR generator and Assembly generator to process function definitions in addition to the top-level expression
+    - [X] Interpreter
+    - [X] Type checker
+    - [ ] IR
+  - [X] Change the type-checker, IR generator and Assembly generator to process function definitions in addition to the top-level expression
   - [ ] Implement return ... expressions in all compiler stages
     - [ ] A function whose return type is not Unit must execute a return expression.
     - [ ] Test Gadget does have cases where the only return occurs within a while true loop
