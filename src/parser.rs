@@ -295,7 +295,7 @@ fn parse_fun<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Function<
 
     // Parse parameters
     let mut parameters = Vec::new();
-    loop {
+    while tokens.consume_expect(at, (Kind::Punctuation, ")")).is_err() {
         // Parse identifier
         let (token, _) = tokens.peek(at);
         let id = parse_identifier(tokens, at).map(|ast| *ast.tree);
