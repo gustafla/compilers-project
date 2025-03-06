@@ -923,7 +923,7 @@ fn function_definition() {
             fun!("square" ("x" = Type::Int) -> Type::Int, blk!{
                 ret!(op!{id!("x"), Operator::Mul, id!("x")});
             })
-            => cal!("print_int", cal!("square", int!(8)))
+            => blk!{cal!("print_int", cal!("square", int!(8)));}
         }
     );
 }

@@ -224,6 +224,23 @@ fn parse_continue<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<
     }))
 }
 
+fn parse_return<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
+    let (token, fragment) = tokens.peek(at);
+    if token.kind() != Kind::Identifier || fragment != "return" {
+        return None;
+    }
+    tokens.consume(at);
+
+    let expr = match parse_expression(tokens, at) {
+        Ok(ast) => ast,
+        Err(e) => return Some(Err(e)),
+    };
+
+    Some(Ok(
+        ast! {(token.location().start()..expr.location.end()).into() => Expression::Return(expr)},
+    ))
+}
+
 fn parse_fn_call<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a>, Error>> {
     let ((t0, s0), (_, s1)) = (tokens.peek(at), tokens.peek_ahead(at));
     traceln!("parse_fn_call, token = {s0:?}");
@@ -500,6 +517,7 @@ fn parse_factor<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Result<Ast<'a>, Erro
             parse_while,
             parse_break,
             parse_continue,
+            parse_return,
             parse_fn_call,
         ] {
             if let Some(res) = parse_fn(tokens, at) {
