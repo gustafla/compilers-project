@@ -41,7 +41,7 @@ macro_rules! call {
     ($symtab: expr, $id: expr, $args: expr) => {
         match resolve!($symtab, $id).get() {
             Value::Fun(f) => f($args),
-            _ => unreachable!("Invalid builtin call"),
+            _ => unreachable!("Invalid function call"),
         }
     };
 }
@@ -50,7 +50,7 @@ macro_rules! resolve {
     ($symtab: expr, $key: expr) => {
         match $symtab.resolve($key) {
             Ok(value) => value,
-            Err(e) => panic!("{e:?}"),
+            Err(e) => panic!("{e}"),
         }
     };
 }
@@ -97,12 +97,13 @@ impl From<&Literal<'_>> for Value {
 
 // std::ops::ControlFlow isn't sufficient
 #[derive(Debug)]
-enum LoopControl {
+enum ControlFlow {
     Continue,
     Break,
+    Return(Value),
 }
 
-fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Result<Value, LoopControl> {
+fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Result<Value, ControlFlow> {
     match ast.tree.as_ref() {
         Expression::Literal(literal) => Ok(literal.into()),
         Expression::Identifier(identifier) => Ok(resolve!(symtab, identifier.name).get().clone()),
@@ -224,15 +225,16 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Result<V
             } {
                 match interpret(&node.do_expr, symtab) {
                     Ok(_) => {}
-                    Err(LoopControl::Continue) => continue,
-                    Err(LoopControl::Break) => break,
+                    Err(ControlFlow::Return(_)) => {}
+                    Err(ControlFlow::Continue) => continue,
+                    Err(ControlFlow::Break) => break,
                 }
             }
             Ok(Value::Unit)
         }
-        Expression::Break => Err(LoopControl::Break),
-        Expression::Continue => Err(LoopControl::Continue),
-        Expression::Return(ast) => todo!(),
+        Expression::Break => Err(ControlFlow::Break),
+        Expression::Continue => Err(ControlFlow::Continue),
+        Expression::Return(ast) => Err(ControlFlow::Return(interpret(ast, symtab)?)),
     }
 }
 
@@ -256,8 +258,9 @@ fn main() {
         Ok(code) => code,
         Err(ref e) => err!(e),
     };
+    let code = Box::leak(code.into_boxed_str());
 
-    let module = match parse(&code, &cli.config) {
+    let module = match parse(code, &cli.config) {
         Ok(ast) => ast,
         Err(ref e) => err!(e),
     };
@@ -342,10 +345,29 @@ fn main() {
             Value::Bool(!a)
         ),
     ]);
+    for fun in module.functions {
+        let fun_symtab = symtab.clone();
+        let runfun = Value::Fun(Rc::new(move |args: &[Value]| {
+            let mut symtab = fun_symtab.clone();
+            symtab.push();
+            for (parm, value) in fun.parameters.iter().zip(args.iter()) {
+                symtab.insert(parm.identifier.name, value.clone());
+            }
+            let res = match interpret(&fun.body, &mut symtab) {
+                Ok(val) => val,
+                Err(ControlFlow::Return(val)) => val,
+                Err(e) => panic!("Control flow statement {e:?} used out of context"),
+            };
+            symtab.pop();
+            res
+        }));
+        symtab.insert(fun.identifier.name, runfun);
+    }
 
     match interpret(module.main.as_ref().unwrap(), &mut symtab) {
         Ok(Value::Int(i)) => call!(symtab, "print_int", &[Value::Int(i)]),
         Ok(Value::Bool(b)) => call!(symtab, "print_bool", &[Value::Bool(b)]),
+        Err(e) => panic!("Control flow statement {e:?} used out of context"),
         _ => Value::Unit,
     };
 }
