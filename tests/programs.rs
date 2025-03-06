@@ -18,15 +18,15 @@ struct Json {
 fn compile_and_run_programs() {
     let config = compilers_project::Config { verbose: true };
     for file in fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("programs")).unwrap() {
-        let Ok(file) = file else {
-            continue;
-        };
-        if !file.metadata().is_ok_and(|m| m.is_file()) {
+        let file = file.unwrap();
+        if !file.metadata().unwrap().is_file() {
             continue;
         }
         if file.path().extension() == Some(OsStr::new("json")) {
             continue;
         }
+
+        println!("-------- TESTING {} --------", file.path().display());
 
         // Load config for the program test case
         let conf = fs::read_to_string(file.path().with_extension("json")).unwrap();

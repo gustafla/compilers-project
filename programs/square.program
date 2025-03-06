@@ -1,0 +1,6 @@
+fun square(x: Int): Int {
+	return x * x;
+}
+
+var x = read_int();
+print_int(square(x));

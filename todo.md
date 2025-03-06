@@ -3,7 +3,7 @@
   - [X] Add IR generation for functions
   - [X] Make assembly generator emit code for multiple functions
     - [X] Labels in functions must be unique within the module
-  - [ ] Implement function parsing
+  - [X] Implement function parsing
   - [ ] Add user-defined functions in symbol tables
     - [ ] In the interpreter, map each user-defined function to a Python function that runs the interpreter on the user-defined function’s body
     - [ ] In the type-checker, map each user-defined function to a function type based on the type annotations
