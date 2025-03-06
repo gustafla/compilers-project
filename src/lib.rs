@@ -15,7 +15,7 @@ pub use location::Location;
 pub use symtab::SymbolTable;
 pub use typecheck::Type;
 
-use std::{collections::HashMap, sync::LazyLock};
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -49,8 +49,41 @@ macro_rules! fun {
     };
 }
 
-static ROOT_TYPES: LazyLock<Vec<(&str, Type)>> = LazyLock::new(|| {
-    vec![
+type RootTypes<'a> = Vec<(&'a str, Type)>;
+
+pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
+    let assembly_code = generate_assembly(code, config)?;
+    let x86_64_elf = asm::assemble(&assembly_code, false, &[])?;
+    Ok(x86_64_elf)
+}
+
+pub fn generate_assembly(code: &str, config: &Config) -> Result<String, Error> {
+    let ins = generate_ir(code, config)?;
+    let asm = asm::generate_assembly(&ins);
+    Ok(asm)
+}
+
+pub fn generate_ir<'a>(
+    code: &'a str,
+    config: &Config,
+) -> Result<HashMap<&'a str, Vec<ir::Instruction<'a>>>, Error> {
+    let (ast, root_types) = typecheck_impl(code, config)?;
+    let ins = ir::generate_ir(&ast, &root_types)?;
+    Ok(ins)
+}
+
+pub fn typecheck<'a>(code: &'a str, config: &Config) -> Result<ast::Module<'a>, Error> {
+    let (module, _) = typecheck_impl(code, config)?;
+    Ok(module)
+}
+
+fn typecheck_impl<'a>(
+    code: &'a str,
+    config: &Config,
+) -> Result<(ast::Module<'a>, RootTypes<'a>), Error> {
+    let mut module = parse(code, config)?;
+
+    let mut root_types = vec![
         ("print_int", fun!((Type::Int) => Type::Unit)),
         ("print_bool", fun!((Type::Bool) => Type::Unit)),
         ("read_int", fun!(() => Type::Int)),
@@ -106,34 +139,16 @@ static ROOT_TYPES: LazyLock<Vec<(&str, Type)>> = LazyLock::new(|| {
             Operator::Not.function_name(Ary::Unary),
             fun!((Type::Bool) => Type::Bool),
         ),
-    ]
-});
+    ];
+    root_types.extend(
+        module
+            .functions
+            .iter()
+            .map(|fun| (fun.identifier.name, fun.as_type())),
+    );
 
-pub fn compile(code: &str, config: &Config) -> Result<Vec<u8>, Error> {
-    let assembly_code = generate_assembly(code, config)?;
-    let x86_64_elf = asm::assemble(&assembly_code, false, &[])?;
-    Ok(x86_64_elf)
-}
-
-pub fn generate_assembly(code: &str, config: &Config) -> Result<String, Error> {
-    let ins = generate_ir(code, config)?;
-    let asm = asm::generate_assembly(&ins);
-    Ok(asm)
-}
-
-pub fn generate_ir<'a>(
-    code: &'a str,
-    config: &Config,
-) -> Result<HashMap<&'a str, Vec<ir::Instruction<'a>>>, Error> {
-    let ast = typecheck(code, config)?;
-    let ins = ir::generate_ir(&ast, &ROOT_TYPES)?;
-    Ok(ins)
-}
-
-pub fn typecheck<'a>(code: &'a str, config: &Config) -> Result<ast::Module<'a>, Error> {
-    let mut module = parse(code, config)?;
-    typecheck::typecheck(&mut module, &ROOT_TYPES)?;
-    Ok(module)
+    typecheck::typecheck(&mut module, &root_types)?;
+    Ok((module, root_types))
 }
 
 pub fn parse<'a>(code: &'a str, config: &Config) -> Result<ast::Module<'a>, Error> {

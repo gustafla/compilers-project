@@ -20,6 +20,15 @@ pub struct Function<'a> {
     pub body: Ast<'a>,
 }
 
+impl Function<'_> {
+    pub fn as_type(&self) -> Type {
+        Type::Fun {
+            parameters: self.parameters.iter().map(|p| p.ty.clone()).collect(),
+            result: Box::new(self.returns.clone()),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Module<'a> {
     pub functions: Vec<Function<'a>>,

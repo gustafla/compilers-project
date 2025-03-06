@@ -6,6 +6,7 @@ use thiserror::Error;
 pub struct Error(String);
 
 #[doc(alias = "SymTab")]
+#[derive(Clone)]
 pub struct SymbolTable<'a, T>(Vec<HashMap<&'a str, T>>);
 
 impl<'a, T, I> From<I> for SymbolTable<'a, T>
