@@ -20,9 +20,11 @@ fn compile_and_run_programs() {
     for file in fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("programs")).unwrap() {
         let file = file.unwrap();
         if !file.metadata().unwrap().is_file() {
+            println!("{} isn't a file", file.path().display());
             continue;
         }
         if file.path().extension() == Some(OsStr::new("json")) {
+            println!("{} is a json file, skip", file.path().display());
             continue;
         }
 
