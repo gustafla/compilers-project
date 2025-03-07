@@ -1,9 +1,9 @@
 use crate::{
     Location, SymbolTable, Type,
-    ast::{Ast, Expression, Int, Literal, Module, Operator, op::Ary},
+    ast::{Ast, Expression, Int, Literal, Module, Operator, Parameter, op::Ary},
     symtab,
 };
-use std::{collections::HashMap, fmt::Display, mem};
+use std::{collections::HashMap, fmt::Display};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -53,6 +53,9 @@ pub enum Op<'a> {
         then_label: Label,
         else_label: Label,
     },
+    Return {
+        arg: Option<Var>,
+    },
 }
 
 impl Display for Op<'_> {
@@ -95,6 +98,13 @@ impl Display for Op<'_> {
             } => {
                 write!(f, "CondJump(x{cond}, L{then_label}, L{else_label})")
             }
+            Op::Return { arg } => {
+                if let Some(arg) = arg {
+                    write!(f, "Return(x{arg})")
+                } else {
+                    write!(f, "Return(None)")
+                }
+            }
         }
     }
 }
@@ -104,10 +114,10 @@ pub struct Instruction<'a> {
     pub op: Op<'a>,
 }
 
-struct Generator<'a> {
-    // Counters for vars and labels
+trait GeneratorState {}
+struct Running<'a> {
+    // Counter for variables
     var: u32,
-    label: u32,
     // Maps AST identifiers to IR variables
     symtab: SymbolTable<'a, Var>,
     // Tracks AST function identifiers
@@ -117,11 +127,31 @@ struct Generator<'a> {
     // Output IR instructions
     ins: Vec<Instruction<'a>>,
 }
+struct Stopped;
 
-impl<'a> Generator<'a> {
+impl GeneratorState for Running<'_> {}
+impl GeneratorState for Stopped {}
+
+struct Generator<State: GeneratorState> {
+    // Counter for labels
+    label: u32,
+    // Typestate pattern
+    state: State,
+}
+
+impl<State: GeneratorState> Generator<State> {
     const UNIT: Var = 0;
+}
 
-    pub fn new(root_types: &[(&'a str, Type)]) -> Self {
+impl Generator<Stopped> {
+    pub fn new() -> Self {
+        Self {
+            label: 0,
+            state: Stopped,
+        }
+    }
+
+    pub fn start<'a>(self, root_types: &[(&'a str, Type)]) -> Generator<Running<'a>> {
         let root_funs: Vec<(&str, &str)> = root_types
             .iter()
             .filter(|(_, ty)| matches!(ty, Type::Fun { .. }))
@@ -141,16 +171,36 @@ impl<'a> Generator<'a> {
             var += 1;
         }
 
-        Self {
-            var,
-            label: 0,
-            symtab,
-            funtab,
-            var_types,
-            ins: Vec::new(),
+        Generator {
+            label: self.label,
+            state: Running {
+                var,
+                symtab,
+                funtab,
+                var_types,
+                ins: Vec::new(),
+            },
         }
     }
 
+    pub fn start_with_parameters<'a>(
+        self,
+        root_types: &[(&'a str, Type)],
+        parameters: &[Parameter<'a>],
+    ) -> (Generator<Running<'a>>, Vec<Var>) {
+        let mut generator = self.start(root_types);
+        let mut vars = Vec::with_capacity(parameters.len());
+        for parm in parameters {
+            let ir_var = generator.new_var(&parm.ty);
+            generator.state.symtab.insert(parm.identifier.name, ir_var);
+            vars.push(ir_var);
+        }
+
+        (generator, vars)
+    }
+}
+
+impl<'a> Generator<Running<'a>> {
     pub fn visit(&mut self, ast: &Ast<'a>, in_loop: Option<&LoopLabels>) -> Result<Var, Error> {
         let location = &ast.location;
         let ty = ast.ty.as_ref().expect("AST should have been type checked");
@@ -168,7 +218,9 @@ impl<'a> Generator<'a> {
                 }
                 Literal::Str(_) => unimplemented!("String literals are not supported"),
             },
-            Expression::Identifier(identifier) => Ok(*self.symtab.resolve(identifier.name)?.get()),
+            Expression::Identifier(identifier) => {
+                Ok(*self.state.symtab.resolve(identifier.name)?.get())
+            }
             Expression::Conditional(conditional) => {
                 let then_label = self.new_label();
                 let else_label = self.new_label();
@@ -208,7 +260,7 @@ impl<'a> Generator<'a> {
                 }
             }
             Expression::FnCall(fn_call) => {
-                let fun = *self.funtab.resolve(fn_call.function.name)?.get();
+                let fun = *self.state.funtab.resolve(fn_call.function.name)?.get();
                 let mut args = Vec::new();
                 for arg in &fn_call.arguments {
                     args.push(self.visit(arg, in_loop)?);
@@ -218,8 +270,8 @@ impl<'a> Generator<'a> {
                 Ok(dest)
             }
             Expression::Block(block) => {
-                self.symtab.push();
-                self.funtab.push();
+                self.state.symtab.push();
+                self.state.funtab.push();
                 for expr in &block.expressions {
                     self.visit(expr, in_loop)?;
                 }
@@ -228,14 +280,14 @@ impl<'a> Generator<'a> {
                 } else {
                     Self::UNIT
                 };
-                self.symtab.pop();
-                self.funtab.pop();
+                self.state.symtab.pop();
+                self.state.funtab.pop();
                 Ok(result)
             }
             Expression::Var(var) => {
                 let init = self.visit(&var.init, in_loop)?;
                 let ir_var = self.new_var(var.init.ty.as_ref().unwrap());
-                self.symtab.insert(var.id.name, ir_var);
+                self.state.symtab.insert(var.id.name, ir_var);
                 self.emit_copy(location, init, ir_var);
                 Ok(Self::UNIT)
             }
@@ -246,7 +298,7 @@ impl<'a> Generator<'a> {
                         Expression::Identifier(identifier) => identifier.name,
                         _ => unreachable!("= requires identifier on the lhs"),
                     };
-                    let var_left = *self.symtab.resolve(key)?.get();
+                    let var_left = *self.state.symtab.resolve(key)?.get();
                     let var_right = self.visit(&binary_op.right, in_loop)?;
                     self.emit_copy(location, var_right, var_left);
                     return Ok(var_right);
@@ -295,6 +347,7 @@ impl<'a> Generator<'a> {
             }
             Expression::UnaryOp(unary_op) => {
                 let fun = *self
+                    .state
                     .funtab
                     .resolve(unary_op.op.function_name(Ary::Unary))?
                     .get();
@@ -332,21 +385,28 @@ impl<'a> Generator<'a> {
                 }
                 Ok(Self::UNIT)
             }
-            Expression::Return(ast) => todo!(),
+            Expression::Return(ast) => {
+                let arg = match ast {
+                    Some(ast) => Some(self.visit(ast, in_loop)?),
+                    None => None,
+                };
+                self.emit_return(location, arg);
+                Ok(Self::UNIT)
+            }
         }
     }
 
     pub fn type_of(&self, key: Var) -> &Type {
-        match self.var_types.get(&key) {
+        match self.state.var_types.get(&key) {
             Some(ty) => ty,
             None => panic!("Var {key} has no type info. This is a bug."),
         }
     }
 
     pub fn new_var(&mut self, ty: &Type) -> Var {
-        let var = self.var;
-        self.var += 1;
-        self.var_types.insert(var, ty.clone());
+        let var = self.state.var;
+        self.state.var += 1;
+        self.state.var_types.insert(var, ty.clone());
         var
     }
 
@@ -357,14 +417,14 @@ impl<'a> Generator<'a> {
     }
 
     pub fn emit_label(&mut self, location: &Location, label: impl Into<Label>) {
-        self.ins.push(Instruction {
+        self.state.ins.push(Instruction {
             location: location.clone(),
             op: Op::Label(label.into()),
         });
     }
 
     pub fn emit_load_int_const(&mut self, location: &Location, value: Int, dest: impl Into<Var>) {
-        self.ins.push(Instruction {
+        self.state.ins.push(Instruction {
             location: location.clone(),
             op: Op::LoadIntConst {
                 value,
@@ -374,7 +434,7 @@ impl<'a> Generator<'a> {
     }
 
     pub fn emit_load_bool_const(&mut self, location: &Location, value: bool, dest: impl Into<Var>) {
-        self.ins.push(Instruction {
+        self.state.ins.push(Instruction {
             location: location.clone(),
             op: Op::LoadBoolConst {
                 value,
@@ -384,7 +444,7 @@ impl<'a> Generator<'a> {
     }
 
     pub fn emit_copy(&mut self, location: &Location, source: impl Into<Var>, dest: impl Into<Var>) {
-        self.ins.push(Instruction {
+        self.state.ins.push(Instruction {
             location: location.clone(),
             op: Op::Copy {
                 source: source.into(),
@@ -400,7 +460,7 @@ impl<'a> Generator<'a> {
         args: impl IntoIterator<Item = Var>,
         dest: impl Into<Var>,
     ) {
-        self.ins.push(Instruction {
+        self.state.ins.push(Instruction {
             location: location.clone(),
             op: Op::Call {
                 fun,
@@ -411,7 +471,7 @@ impl<'a> Generator<'a> {
     }
 
     pub fn emit_jump(&mut self, location: &Location, label: impl Into<Label>) {
-        self.ins.push(Instruction {
+        self.state.ins.push(Instruction {
             location: location.clone(),
             op: Op::Jump {
                 label: label.into(),
@@ -426,7 +486,7 @@ impl<'a> Generator<'a> {
         then_label: impl Into<Label>,
         else_label: impl Into<Label>,
     ) {
-        self.ins.push(Instruction {
+        self.state.ins.push(Instruction {
             location: location.clone(),
             op: Op::CondJump {
                 cond: cond.into(),
@@ -436,50 +496,110 @@ impl<'a> Generator<'a> {
         });
     }
 
-    pub fn take(&mut self) -> Vec<Instruction<'a>> {
+    pub fn emit_return(&mut self, location: &Location, arg: impl Into<Option<Var>>) {
+        self.state.ins.push(Instruction {
+            location: location.clone(),
+            op: Op::Return { arg: arg.into() },
+        });
+    }
+
+    pub fn finish(mut self) -> (Generator<Stopped>, Vec<Instruction<'a>>) {
         #[cfg(debug_assertions)]
         {
-            assert_eq!(self.symtab.depth(), 1);
-            assert_eq!(self.funtab.depth(), 1);
+            assert_eq!(self.state.symtab.depth(), 1);
+            assert_eq!(self.state.funtab.depth(), 1);
         }
-        mem::take(&mut self.ins)
+        match self.state.ins.last() {
+            Some(Instruction {
+                op: Op::Return { .. },
+                ..
+            }) => {}
+            _ => self.emit_return(&Location::default(), None),
+        }
+        (
+            Generator {
+                label: self.label,
+                state: Stopped,
+            },
+            self.state.ins,
+        )
+    }
+}
+
+pub struct Function<'a> {
+    pub identifier: &'a str,
+    pub parameters: Vec<Var>,
+}
+
+impl Display for Function<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "fun {}(", self.identifier)?;
+        match self.parameters.as_slice() {
+            [] => {}
+            [first] => {
+                write!(f, "x{}", first)?;
+            }
+            [first, rest @ ..] => {
+                write!(f, "x{}", first)?;
+                for parm in rest {
+                    write!(f, ", x{}", parm)?;
+                }
+            }
+        }
+        write!(f, ")")
     }
 }
 
 pub fn generate_ir<'a>(
     module: &Module<'a>,
     root_types: &[(&'a str, Type)],
-) -> Result<HashMap<&'a str, Vec<Instruction<'a>>>, Error> {
-    let mut funs = HashMap::new();
-    let mut generator = Generator::new(root_types);
+) -> Result<Vec<(Function<'a>, Vec<Instruction<'a>>)>, Error> {
+    let mut funs = Vec::with_capacity(module.functions.len() + 1);
+    let mut generator = Generator::new();
 
     // Generate user-defined functions from module
     for fun in &module.functions {
-        generator.visit(&fun.body, None)?;
-        funs.insert(fun.identifier.name, generator.take());
-        // TODO: return values
+        let (mut fungen, parameters) = generator.start_with_parameters(root_types, &fun.parameters);
+        fungen.visit(&fun.body, None)?;
+        let (fungen, ins) = fungen.finish();
+        funs.push((
+            Function {
+                identifier: fun.identifier.name,
+                parameters,
+            },
+            ins,
+        ));
+        generator = fungen;
     }
 
     // Generate main function from module root
     // TODO: modules without main
+    let mut generator = generator.start(root_types);
     let var_final_result = generator.visit(module.main.as_ref().unwrap(), None)?;
     match generator.type_of(var_final_result) {
         Type::Int => generator.emit_call(
             &Location::default(),
             "print_int",
             [var_final_result],
-            Generator::UNIT,
+            Generator::<Running>::UNIT,
         ),
         Type::Bool => generator.emit_call(
             &Location::default(),
             "print_bool",
             [var_final_result],
-            Generator::UNIT,
+            Generator::<Running>::UNIT,
         ),
         Type::Unit => {}
         Type::Fun { .. } => unreachable!("Function values are not supported"),
     }
-    funs.insert("main", generator.take());
+    let (_, ins) = generator.finish();
+    funs.push((
+        Function {
+            identifier: "main",
+            parameters: Vec::new(),
+        },
+        ins,
+    ));
 
     Ok(funs)
 }

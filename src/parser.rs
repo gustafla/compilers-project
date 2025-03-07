@@ -231,13 +231,21 @@ fn parse_return<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Ast<'a
     }
     tokens.consume(at);
 
-    let expr = match parse_expression(tokens, at) {
-        Ok(ast) => ast,
-        Err(e) => return Some(Err(e)),
+    let expr = if tokens.peek(at).0.kind() != Kind::Punctuation {
+        match parse_expression(tokens, at) {
+            Ok(ast) => Some(ast),
+            Err(e) => return Some(Err(e)),
+        }
+    } else {
+        None
     };
 
+    let end = expr
+        .as_ref()
+        .map(|ast| ast.location.end())
+        .unwrap_or(token.location().end());
     Some(Ok(
-        ast! {(token.location().start()..expr.location.end()).into() => Expression::Return(expr)},
+        ast! {(token.location().start()..end).into() => Expression::Return(expr)},
     ))
 }
 
@@ -363,6 +371,7 @@ fn parse_fun<'a>(tokens: &Tokens<'a>, at: &mut usize) -> Option<Result<Function<
         (token, _) => return Some(Err(Error::ExpectedType(token.kind()))),
     };
 
+    // Parse body
     let body = match parse_block(tokens, at) {
         Some(Ok(ast)) => ast,
         Some(Err(e)) => return Some(Err(e)),

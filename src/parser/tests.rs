@@ -927,3 +927,25 @@ fn function_definition() {
         }
     );
 }
+
+#[test]
+fn return_without_arg() {
+    let code = r#"
+        fun noop(): Unit {
+            return;
+        }
+
+        noop();
+    "#;
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        mdl! {
+            fun!("noop" () -> Type::Unit, blk!{
+                ret!();
+            })
+            => blk!{cal!("noop");}
+        }
+    );
+}

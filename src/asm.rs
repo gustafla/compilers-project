@@ -9,14 +9,16 @@ use std::{
     fmt::Write,
 };
 
+const REGISTER_ARGUMENTS: &[&str] = &["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+
 struct Locals {
     stack_used: usize,
     var_location: HashMap<ir::Var, String>,
 }
 
 impl Locals {
-    fn new(ins: &[ir::Instruction]) -> Self {
-        let vars = Self::get_all_ir_variables(ins);
+    pub fn new(parm: &[ir::Var], ins: &[ir::Instruction]) -> Self {
+        let vars = Self::get_all_ir_variables(parm, ins);
         let stack_used = vars.len() * 8;
         let mut var_location = HashMap::new();
         for (i, var) in vars.into_iter().enumerate() {
@@ -28,8 +30,19 @@ impl Locals {
         }
     }
 
-    fn get_all_ir_variables(ins: &[ir::Instruction]) -> HashSet<ir::Var> {
-        let mut set = HashSet::new();
+    pub fn get_ref(&self, var: &ir::Var) -> &str {
+        match self.var_location.get(var) {
+            Some(s) => s,
+            None => panic!("Invalid reference to {}", var),
+        }
+    }
+
+    pub fn stack_used(&self) -> usize {
+        self.stack_used
+    }
+
+    fn get_all_ir_variables(parm: &[ir::Var], ins: &[ir::Instruction]) -> HashSet<ir::Var> {
+        let mut set: HashSet<ir::Var> = parm.iter().copied().collect();
 
         for insn in ins {
             match &insn.op {
@@ -58,21 +71,14 @@ impl Locals {
                 ir::Op::CondJump { cond, .. } => {
                     set.insert(*cond);
                 }
+                ir::Op::Return { arg: Some(arg) } => {
+                    set.insert(*arg);
+                }
+                ir::Op::Return { arg: None } => {}
             }
         }
 
         set
-    }
-
-    fn get_ref(&self, var: &ir::Var) -> &str {
-        match self.var_location.get(var) {
-            Some(s) => s,
-            None => panic!("Invalid reference to {}", var),
-        }
-    }
-
-    fn stack_used(&self) -> usize {
-        self.stack_used
     }
 }
 
@@ -94,15 +100,26 @@ pub(crate) use emit_ind;
 fn emit_function(
     out: &mut String,
     intrinsics: &Intrinsics,
-    fun: &str,
+    fun: &ir::Function,
     ins: &[ir::Instruction<'_>],
 ) {
-    let locals = Locals::new(ins);
+    let locals = Locals::new(&fun.parameters, ins);
     emit!(out, "");
-    emit!(out, "{}:", fun);
+    emit!(out, ".global {}", fun.identifier);
+    emit!(out, ".type {}, @function", fun.identifier);
+    emit!(out, "{}:", fun.identifier);
     emit_ind!(out, "pushq %rbp");
     emit_ind!(out, "movq %rsp, %rbp");
     emit_ind!(out, "subq ${}, %rsp", locals.stack_used());
+
+    // Copy register arguments to locals
+    for (reg, arg) in REGISTER_ARGUMENTS.iter().zip(&fun.parameters) {
+        emit_ind!(out, "movq {}, {}", reg, locals.get_ref(arg));
+    }
+    // Copy stack arguments to locals
+    for (i, arg) in fun.parameters.iter().skip(6).enumerate() {
+        emit_ind!(out, "movq {}(%rbp), {}", 8 * (i + 2), locals.get_ref(arg));
+    }
 
     for insn in ins {
         if let ir::Op::Label(..) = insn.op {
@@ -144,10 +161,7 @@ fn emit_function(
                 }
 
                 // Set register arguments
-                for (reg, arg) in ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
-                    .iter()
-                    .zip(args.iter().take(6))
-                {
+                for (reg, arg) in REGISTER_ARGUMENTS.iter().zip(args.iter()) {
                     emit_ind!(out, "movq {}, {}", locals.get_ref(arg), reg);
                 }
 
@@ -187,15 +201,24 @@ fn emit_function(
                 emit_ind!(out, "jne .L{}", then_label);
                 emit_ind!(out, "jmp .L{}", else_label);
             }
+            ir::Op::Return { arg } => {
+                emit_ind!(
+                    out,
+                    "movq {}, %rax",
+                    match arg {
+                        Some(var) => locals.get_ref(var),
+                        None => "$0",
+                    }
+                );
+                emit_ind!(out, "movq %rbp, %rsp");
+                emit_ind!(out, "popq %rbp");
+                emit_ind!(out, "ret");
+            }
         }
     }
-
-    emit_ind!(out, "movq %rbp, %rsp");
-    emit_ind!(out, "popq %rbp");
-    emit_ind!(out, "ret");
 }
 
-pub fn generate_assembly<'a>(funs: &HashMap<&'a str, Vec<ir::Instruction<'a>>>) -> String {
+pub fn generate_assembly<'a>(funs: &[(ir::Function<'a>, Vec<ir::Instruction<'a>>)]) -> String {
     let mut out = String::new();
 
     let intrinsics = intrinsics::intrinsics();
@@ -203,11 +226,6 @@ pub fn generate_assembly<'a>(funs: &HashMap<&'a str, Vec<ir::Instruction<'a>>>) 
     emit_ind!(out, ".extern print_int");
     emit_ind!(out, ".extern print_bool");
     emit_ind!(out, ".extern read_int");
-    emit_ind!(out, ".global main");
-
-    for fun in funs.keys() {
-        emit_ind!(out, ".type {}, @function", fun);
-    }
 
     emit!(out, "");
     emit_ind!(out, ".section .text");

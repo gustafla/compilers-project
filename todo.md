@@ -7,13 +7,14 @@
   - [X] Add user-defined functions in symbol tables
     - [X] In the interpreter, map each user-defined function to a Python function that runs the interpreter on the user-defined function’s body
     - [X] In the type-checker, map each user-defined function to a function type based on the type annotations
-    - [ ] In the IR and Assembly generators, do the same as with built-in functions
-  - [ ] Make incoming parameters available as variables in all stages that use a symbol table
+    - [X] In the IR and Assembly generators, do the same as with built-in functions
+  - [X] Make incoming parameters available as variables in all stages that use a symbol table
     - [X] Interpreter
     - [X] Type checker
-    - [ ] IR
+    - [X] IR
+    - [X] Assembly
   - [X] Change the type-checker, IR generator and Assembly generator to process function definitions in addition to the top-level expression
-  - [ ] Implement return ... expressions in all compiler stages
+  - [X] Implement return ... expressions in all compiler stages
     - [ ] A function whose return type is not Unit must execute a return expression.
     - [ ] Test Gadget does have cases where the only return occurs within a while true loop
 - [ ] Errors with location

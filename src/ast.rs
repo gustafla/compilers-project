@@ -55,7 +55,7 @@ pub enum Expression<'a> {
     While(While<'a>),
     Break,
     Continue,
-    Return(Ast<'a>),
+    Return(Option<Ast<'a>>),
 }
 
 impl Display for Expression<'_> {

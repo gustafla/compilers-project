@@ -171,8 +171,11 @@ macro_rules! fun {
 }
 
 macro_rules! ret {
+    () => {
+        ast! {crate::ast::Expression::Return(None)}
+    };
     ($e: expr $(,)?) => {
-        ast! {crate::ast::Expression::Return($e)}
+        ast! {crate::ast::Expression::Return(Some($e))}
     };
 }
 

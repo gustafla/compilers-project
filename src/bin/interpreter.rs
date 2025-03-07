@@ -234,7 +234,8 @@ fn interpret<'a>(ast: &Ast<'a>, symtab: &mut SymbolTable<'a, Value>) -> Result<V
         }
         Expression::Break => Err(ControlFlow::Break),
         Expression::Continue => Err(ControlFlow::Continue),
-        Expression::Return(ast) => Err(ControlFlow::Return(interpret(ast, symtab)?)),
+        Expression::Return(Some(ast)) => Err(ControlFlow::Return(interpret(ast, symtab)?)),
+        Expression::Return(None) => Err(ControlFlow::Return(Value::Unit)),
     }
 }
 

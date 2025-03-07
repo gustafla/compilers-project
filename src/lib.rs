@@ -15,7 +15,6 @@ pub use location::Location;
 pub use symtab::SymbolTable;
 pub use typecheck::Type;
 
-use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -66,7 +65,7 @@ pub fn generate_assembly(code: &str, config: &Config) -> Result<String, Error> {
 pub fn generate_ir<'a>(
     code: &'a str,
     config: &Config,
-) -> Result<HashMap<&'a str, Vec<ir::Instruction<'a>>>, Error> {
+) -> Result<Vec<(ir::Function<'a>, Vec<ir::Instruction<'a>>)>, Error> {
     let (ast, root_types) = typecheck_impl(code, config)?;
     let ins = ir::generate_ir(&ast, &root_types)?;
     Ok(ins)

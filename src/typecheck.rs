@@ -232,7 +232,10 @@ fn visit<'a>(
         Expression::Break => Type::Unit,
         Expression::Continue => Type::Unit,
         Expression::Return(ast) => {
-            let ty = visit(ast, symtab, fun)?;
+            let ty = match ast {
+                Some(ast) => visit(ast, symtab, fun)?,
+                None => Type::Unit,
+            };
             let Some(fun) = fun else {
                 return Err(Error::ReturnOutOfFunction);
             };
