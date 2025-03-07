@@ -3,14 +3,14 @@ fun square(x: Int): Int {
 }
 
 fun square2(x: Int): Int {
-	if x == 0 {
+	if x == 0 then {
 		return 0;
 	}
 	return x * x;
 }
 
 fun square3(x: Int): Int {
-	if x == 0 {
+	if x == 0 then {
 		return 0;
 	} else {
 		return x * x;

@@ -118,7 +118,8 @@ fn emit_function(
     }
     // Copy stack arguments to locals
     for (i, arg) in fun.parameters.iter().skip(6).enumerate() {
-        emit_ind!(out, "movq {}(%rbp), {}", 8 * (i + 2), locals.get_ref(arg));
+        emit_ind!(out, "movq {}(%rbp), %rax", 8 * (i + 2));
+        emit_ind!(out, "movq %rax, {}", locals.get_ref(arg));
     }
 
     for insn in ins {
