@@ -23,7 +23,7 @@
     - [X] A function whose return type is not Unit must execute a return expression.
     - [X] Test Gadget does have cases where the only return occurs within a while true loop
 - [X] Add end-to-end testing
-  - [ ] Improve test code quality, remove unwraps
+  - [X] Dynamic test generation
 - [X] Assembly generator
   - [X] Corner cases like assignment, and, or
   - [X] Error handling for asm::assembler
