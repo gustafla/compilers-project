@@ -1,4 +1,8 @@
-- [ ] Add function support
+- [ ] Errors with location
+  - [X] Create appropriate struct and Error implementation
+  - [ ] Parser needs to be refactored, None-cases must contain Location (`enum ParseResult`)
+- [ ] Assign function to var
+- [X] Add function support
   - [X] Add module type
   - [X] Add IR generation for functions
   - [X] Make assembly generator emit code for multiple functions
@@ -15,12 +19,8 @@
     - [X] Assembly
   - [X] Change the type-checker, IR generator and Assembly generator to process function definitions in addition to the top-level expression
   - [X] Implement return ... expressions in all compiler stages
-    - [ ] A function whose return type is not Unit must execute a return expression.
-    - [ ] Test Gadget does have cases where the only return occurs within a while true loop
-- [ ] Errors with location
-  - [X] Create appropriate struct and Error implementation
-  - [ ] Parser needs to be refactored, None-cases must contain Location (`enum ParseResult`)
-- [ ] Assign function to var
+    - [X] A function whose return type is not Unit must execute a return expression.
+    - [X] Test Gadget does have cases where the only return occurs within a while true loop
 - [X] Add end-to-end testing
   - [ ] Improve test code quality, remove unwraps
 - [X] Assembly generator
