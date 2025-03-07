@@ -3,6 +3,7 @@ name = "compilers-project"
 version = "1.2.3"
 edition = "2024"
 default-run = "compiler"
+license = "GPL-3.0-or-later"
 
 [dependencies]
 base64 = "0.22.1"
