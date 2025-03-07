@@ -2,6 +2,7 @@
   - [X] Create appropriate struct and Error implementation
   - [ ] Parser needs to be refactored, None-cases must contain Location (`enum ParseResult`)
 - [ ] Assign function to var
+- [ ] Support multiple modules
 - [X] Add function support
   - [X] Add module type
   - [X] Add IR generation for functions
