@@ -949,3 +949,51 @@ fn return_without_arg() {
         }
     );
 }
+
+#[test]
+fn back_to_back_fun() {
+    let code = r#"
+        fun noop(): Unit {
+            return;
+        }
+        fun length(x: Int, y: Int, z: Int): Int {
+            return sqrt(x*x + y*y + z*z);
+        }
+
+        noop();
+    "#;
+    let tokens = tokenizer::tokenize(code).unwrap();
+    let expression = parse(&tokens).unwrap();
+    assert_eq!(
+        expression,
+        mdl! {
+            fun!("noop" () -> Type::Unit, blk!{
+                ret!();
+            }),
+            fun!("length" ("x" = Type::Int, "y" = Type::Int, "z" = Type::Int) -> Type::Int, blk!{
+                ret!(cal!("sqrt", op!(
+                    op!(
+                        op!(
+                            id!("x"),
+                            Operator::Mul,
+                            id!("x")
+                        ),
+                        Operator::Add,
+                        op!(
+                            id!("y"),
+                            Operator::Mul,
+                            id!("y")
+                        )
+                    ),
+                    Operator::Add,
+                    op!(
+                        id!("z"),
+                        Operator::Mul,
+                        id!("z")
+                    )
+                )));
+            })
+            => blk!{cal!("noop");}
+        }
+    );
+}

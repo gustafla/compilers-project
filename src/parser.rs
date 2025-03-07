@@ -419,7 +419,10 @@ fn parse_block_contents<'a>(
         // Only modules can contain function definitions
         if let Some(module) = module.as_mut() {
             match parse_fun(tokens, at) {
-                Some(Ok(fun)) => module.functions.push(fun),
+                Some(Ok(fun)) => {
+                    module.functions.push(fun);
+                    continue;
+                }
                 Some(Err(e)) => return Err(e),
                 None => {}
             }

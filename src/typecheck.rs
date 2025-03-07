@@ -32,8 +32,10 @@ pub enum Error {
     Redefinition(String),
     #[error("Cannot return from root level block")]
     ReturnOutOfFunction,
-    #[error("Cannot return {0} from function that returns {1}")]
-    ReturnType(Type, Type),
+    #[error("Cannot return {0} from function `{1}`, which returns {2}")]
+    ReturnType(Type, String, Type),
+    #[error("Function `{0}` with a non-unit return type does not return")]
+    Return(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,10 +126,11 @@ fn check_fn<'a>(
 fn visit<'a>(
     ast: &mut Ast<'a>,
     symtab: &mut SymbolTable<'a, Type>,
-    fun: Option<&Type>,
-) -> Result<Type, Error> {
+    fun: Option<(&'a str, &Type)>,
+) -> Result<(Type, bool), Error> {
     let expr = ast.tree.as_mut();
     traceln!("{expr}");
+    let mut returns = false;
     let typ = match expr {
         Expression::Literal(literal) => match literal {
             Literal::Int(_) => Type::Int,
@@ -136,16 +139,17 @@ fn visit<'a>(
         },
         Expression::Identifier(identifier) => symtab.resolve(identifier.name)?.get().clone(),
         Expression::Conditional(conditional) => {
-            let condition = visit(&mut conditional.condition, symtab, fun)?;
+            let (condition, _) = visit(&mut conditional.condition, symtab, fun)?;
             if condition != Type::Bool {
                 return Err(Error::ConditionalCondition(condition));
             }
-            let then_typ = visit(&mut conditional.then_expr, symtab, fun)?;
+            let (then_typ, then_returns) = visit(&mut conditional.then_expr, symtab, fun)?;
             if let Some(else_expr) = &mut conditional.else_expr {
-                let else_typ = visit(else_expr, symtab, fun)?;
+                let (else_typ, else_returns) = visit(else_expr, symtab, fun)?;
                 if then_typ != else_typ {
                     return Err(Error::ConditionalBranches(then_typ, else_typ));
                 }
+                returns |= then_returns && else_returns;
                 then_typ
             } else {
                 Type::Unit
@@ -155,17 +159,21 @@ fn visit<'a>(
             let key = fn_call.function.name;
             let mut arguments = Vec::new();
             for arg in &mut fn_call.arguments {
-                arguments.push(visit(arg, symtab, fun)?);
+                let (arg_ty, arg_returns) = visit(arg, symtab, fun)?;
+                arguments.push(arg_ty);
+                returns |= arg_returns;
             }
             check_fn(symtab, key, &arguments)?
         }
         Expression::Block(block) => {
             symtab.push();
             for expr in &mut block.expressions {
-                visit(expr, symtab, fun)?;
+                returns |= visit(expr, symtab, fun)?.1;
             }
             let result = if let Some(result) = &mut block.result {
-                visit(result, symtab, fun)?
+                let (result_ty, result_returns) = visit(result, symtab, fun)?;
+                returns |= result_returns;
+                result_ty
             } else {
                 Type::Unit
             };
@@ -174,7 +182,8 @@ fn visit<'a>(
         }
         Expression::Var(var) => {
             let key = var.id.name;
-            let typ = visit(&mut var.init, symtab, fun)?;
+            let (typ, init_returns) = visit(&mut var.init, symtab, fun)?;
+            returns |= init_returns;
             if let Some(typed) = &var.typed {
                 if typ != *typed {
                     return Err(Error::AssignWrongType(
@@ -197,14 +206,16 @@ fn visit<'a>(
                     expr => return Err(Error::AssignWrongExpr(format!("{}", expr))),
                 };
                 let lhs = symtab.resolve(key)?.get().clone();
-                let rhs = visit(&mut binary_op.right, symtab, fun)?;
+                let (rhs, assignment_returns) = visit(&mut binary_op.right, symtab, fun)?;
+                returns |= assignment_returns;
                 if lhs != rhs {
                     return Err(Error::AssignWrongType(String::from(key), lhs, rhs));
                 }
                 rhs
             } else {
-                let lhs = visit(&mut binary_op.left, symtab, fun)?;
-                let rhs = visit(&mut binary_op.right, symtab, fun)?;
+                let (lhs, lhs_returns) = visit(&mut binary_op.left, symtab, fun)?;
+                let (rhs, rhs_returns) = visit(&mut binary_op.right, symtab, fun)?;
+                returns |= lhs_returns || rhs_returns;
                 match (binary_op.op, &[lhs, rhs]) {
                     (op @ (Operator::Eq | Operator::Ne), [a, b]) => {
                         if a == b {
@@ -218,41 +229,46 @@ fn visit<'a>(
             }
         }
         Expression::UnaryOp(unary_op) => {
-            let arguments = &[visit(&mut unary_op.right, symtab, fun)?];
-            check_fn(symtab, unary_op.op.function_name(Ary::Unary), arguments)?
+            let (argument, argument_returns) = visit(&mut unary_op.right, symtab, fun)?;
+            returns |= argument_returns;
+            check_fn(symtab, unary_op.op.function_name(Ary::Unary), &[argument])?
         }
         Expression::While(while_loop) => {
-            let condition = visit(&mut while_loop.condition, symtab, fun)?;
+            let (condition, condition_returns) = visit(&mut while_loop.condition, symtab, fun)?;
+            returns |= condition_returns;
             if condition != Type::Bool {
                 return Err(Error::WhileLoopCondition(condition));
             }
-            visit(&mut while_loop.do_expr, symtab, fun)?;
+            let (_, body_returns) = visit(&mut while_loop.do_expr, symtab, fun)?;
+            if let Expression::Literal(Literal::Bool(true)) = while_loop.condition.tree.as_ref() {
+                returns |= body_returns
+            }
             Type::Unit
         }
         Expression::Break => Type::Unit,
         Expression::Continue => Type::Unit,
         Expression::Return(ast) => {
+            returns = true;
             let ty = match ast {
-                Some(ast) => visit(ast, symtab, fun)?,
+                Some(ast) => visit(ast, symtab, fun)?.0,
                 None => Type::Unit,
             };
             let Some(fun) = fun else {
                 return Err(Error::ReturnOutOfFunction);
             };
-            match fun {
-                Type::Fun { result, .. } => {
-                    if **result != ty {
-                        return Err(Error::ReturnType(ty, *result.to_owned()));
-                    }
-                }
-                _ => unreachable!("Function with non-function type"),
+            let (identifier, returntype) = fun;
+            if *returntype != ty {
+                return Err(Error::ReturnType(
+                    ty,
+                    String::from(identifier),
+                    returntype.clone(),
+                ));
             }
             Type::Unit
         }
     };
-    // TODO: Check that function returns the expected value
     ast.ty = Some(typ.clone());
-    Ok(typ)
+    Ok((typ, returns))
 }
 
 pub fn typecheck<'a>(module: &mut Module<'a>, root_types: &[(&'a str, Type)]) -> Result<(), Error> {
@@ -269,10 +285,21 @@ pub fn typecheck<'a>(module: &mut Module<'a>, root_types: &[(&'a str, Type)]) ->
         }
 
         // Check function body
-        let ty = fun.as_type();
-        match visit(&mut fun.body, &mut symtab, Some(&ty)) {
-            Ok(_) => {}
+        match visit(
+            &mut fun.body,
+            &mut symtab,
+            Some((fun.identifier.name, &fun.returns)),
+        ) {
+            Ok((_, true)) => { /* Types are Ok and the function is guaranteed to return */ }
+            Ok((_, false)) => {
+                // Types are Ok, but the function is not guaranteed to return, check whether it's okay
+                if fun.returns != Type::Unit {
+                    end_trace!();
+                    return Err(Error::Return(String::from(fun.identifier.name)));
+                }
+            }
             Err(e) => {
+                // Type error occurred
                 end_trace!();
                 return Err(e);
             }
@@ -282,14 +309,11 @@ pub fn typecheck<'a>(module: &mut Module<'a>, root_types: &[(&'a str, Type)]) ->
     // Check root-level expression
     let res = if let Some(main) = &mut module.main {
         let mut symtab = SymbolTable::from(root_types.to_owned());
-        visit(main, &mut symtab, None)
+        visit(main, &mut symtab, None).map(|_| ())
     } else {
-        Ok(Type::Unit)
+        Ok(())
     };
 
     end_trace!();
-    match res {
-        Ok(_) => Ok(()),
-        Err(e) => Err(e),
-    }
+    res
 }

@@ -1,0 +1,8 @@
+fun square(x: Int): Int {
+	while x < 5 do {
+		return x * x;
+	}
+}
+
+var x = read_int();
+print_int(square(x));

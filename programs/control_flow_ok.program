@@ -1,0 +1,30 @@
+fun square(x: Int): Int {
+	return x * x;
+}
+
+fun square2(x: Int): Int {
+	if x == 0 {
+		return 0;
+	}
+	return x * x;
+}
+
+fun square3(x: Int): Int {
+	if x == 0 {
+		return 0;
+	} else {
+		return x * x;
+	}
+}
+
+fun square4(x: Int): Int {
+	while true do {
+		return x * x;
+	}
+}
+
+var x = read_int();
+print_int(square(x));
+print_int(square2(x));
+print_int(square3(x));
+print_int(square4(x));
