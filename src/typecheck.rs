@@ -144,6 +144,10 @@ fn visit<'a>(
                 return Err(Error::ConditionalCondition(condition));
             }
             let (then_typ, then_returns) = visit(&mut conditional.then_expr, symtab, fun)?;
+            // If condition is trivially true this node may be known to return
+            if let Expression::Literal(Literal::Bool(true)) = conditional.condition.tree.as_ref() {
+                returns |= then_returns;
+            }
             if let Some(else_expr) = &mut conditional.else_expr {
                 let (else_typ, else_returns) = visit(else_expr, symtab, fun)?;
                 if then_typ != else_typ {
@@ -240,8 +244,9 @@ fn visit<'a>(
                 return Err(Error::WhileLoopCondition(condition));
             }
             let (_, body_returns) = visit(&mut while_loop.do_expr, symtab, fun)?;
+            // If condition is trivially true this node may be known to return
             if let Expression::Literal(Literal::Bool(true)) = while_loop.condition.tree.as_ref() {
-                returns |= body_returns
+                returns |= body_returns;
             }
             Type::Unit
         }
