@@ -296,9 +296,9 @@ pub fn typecheck<'a>(module: &mut Module<'a>, root_types: &[(&'a str, Type)]) ->
             Some((fun.identifier.name, &fun.returns)),
         ) {
             Ok((_, true)) => { /* Types are Ok and the function is guaranteed to return */ }
-            Ok((_, false)) => {
+            Ok((ty, false)) => {
                 // Types are Ok, but the function is not guaranteed to return, check whether it's okay
-                if fun.returns != Type::Unit {
+                if fun.returns != ty {
                     end_trace!();
                     return Err(Error::Return(String::from(fun.identifier.name)));
                 }

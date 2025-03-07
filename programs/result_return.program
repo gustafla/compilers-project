@@ -1,0 +1,8 @@
+fun f(n: Int): Int {
+  if n > 5 then {
+    return 5;
+  }
+  123
+}
+
+f(10)

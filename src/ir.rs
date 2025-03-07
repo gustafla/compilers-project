@@ -201,7 +201,11 @@ impl Generator<Stopped> {
 }
 
 impl<'a> Generator<Running<'a>> {
-    pub fn visit(&mut self, ast: &Ast<'a>, in_loop: Option<&LoopLabels>) -> Result<Var, Error> {
+    pub fn generate(&mut self, ast: &Ast<'a>) -> Result<Var, Error> {
+        self.visit(ast, None)
+    }
+
+    fn visit(&mut self, ast: &Ast<'a>, in_loop: Option<&LoopLabels>) -> Result<Var, Error> {
         let location = &ast.location;
         let ty = ast.ty.as_ref().expect("AST should have been type checked");
         match ast.tree.as_ref() {
@@ -560,7 +564,10 @@ pub fn generate_ir<'a>(
     // Generate user-defined functions from module
     for fun in &module.functions {
         let (mut fungen, parameters) = generator.start_with_parameters(root_types, &fun.parameters);
-        fungen.visit(&fun.body, None)?;
+        let var_result = fungen.generate(&fun.body)?;
+        if var_result != Generator::<Running>::UNIT {
+            fungen.emit_return(&Location::default(), var_result);
+        }
         let (fungen, ins) = fungen.finish();
         funs.push((
             Function {
@@ -575,7 +582,7 @@ pub fn generate_ir<'a>(
     // Generate main function from module root
     // TODO: modules without main
     let mut generator = generator.start(root_types);
-    let var_final_result = generator.visit(module.main.as_ref().unwrap(), None)?;
+    let var_final_result = generator.generate(module.main.as_ref().unwrap())?;
     match generator.type_of(var_final_result) {
         Type::Int => generator.emit_call(
             &Location::default(),
