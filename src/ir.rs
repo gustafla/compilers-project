@@ -3,7 +3,10 @@ use crate::{
     ast::{Ast, Expression, Int, Literal, Module, Operator, Parameter, op::Ary},
     symtab,
 };
-use std::{collections::HashMap, fmt::Display};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -120,8 +123,8 @@ struct Running<'a> {
     var: u32,
     // Maps AST identifiers to IR variables
     symtab: SymbolTable<'a, Var>,
-    // Tracks AST function identifiers
-    funtab: SymbolTable<'a, &'a str>,
+    // AST function identifiers
+    functions: HashSet<&'a str>,
     // Maps IR variables to types
     var_types: HashMap<Var, Type>,
     // Output IR instructions
@@ -152,12 +155,11 @@ impl Generator<Stopped> {
     }
 
     pub fn start<'a>(self, root_types: &[(&'a str, Type)]) -> Generator<Running<'a>> {
-        let root_funs: Vec<(&str, &str)> = root_types
+        let functions: HashSet<&str> = root_types
             .iter()
             .filter(|(_, ty)| matches!(ty, Type::Fun { .. }))
-            .map(|(k, _)| (*k, *k))
+            .map(|(k, _)| (*k))
             .collect();
-        let funtab = SymbolTable::from(root_funs);
 
         let mut var_types = HashMap::from([(Self::UNIT, Type::Unit)]);
         let mut symtab = SymbolTable::new();
@@ -176,7 +178,7 @@ impl Generator<Stopped> {
             state: Running {
                 var,
                 symtab,
-                funtab,
+                functions,
                 var_types,
                 ins: Vec::new(),
             },
@@ -264,7 +266,14 @@ impl<'a> Generator<Running<'a>> {
                 }
             }
             Expression::FnCall(fn_call) => {
-                let fun = *self.state.funtab.resolve(fn_call.function.name)?.get();
+                let fun = match self.state.functions.get(fn_call.function.name) {
+                    Some(fun) => *fun,
+                    None => {
+                        return Err(Error::UnresolvedIdentifier(symtab::Error(String::from(
+                            fn_call.function.name,
+                        ))));
+                    }
+                };
                 let mut args = Vec::new();
                 for arg in &fn_call.arguments {
                     args.push(self.visit(arg, in_loop)?);
@@ -275,7 +284,6 @@ impl<'a> Generator<Running<'a>> {
             }
             Expression::Block(block) => {
                 self.state.symtab.push();
-                self.state.funtab.push();
                 for expr in &block.expressions {
                     self.visit(expr, in_loop)?;
                 }
@@ -285,7 +293,6 @@ impl<'a> Generator<Running<'a>> {
                     Self::UNIT
                 };
                 self.state.symtab.pop();
-                self.state.funtab.pop();
                 Ok(result)
             }
             Expression::Var(var) => {
@@ -350,11 +357,15 @@ impl<'a> Generator<Running<'a>> {
                 Ok(var_result)
             }
             Expression::UnaryOp(unary_op) => {
-                let fun = *self
-                    .state
-                    .funtab
-                    .resolve(unary_op.op.function_name(Ary::Unary))?
-                    .get();
+                let name = unary_op.op.function_name(Ary::Unary);
+                let fun = match self.state.functions.get(name) {
+                    Some(fun) => *fun,
+                    None => {
+                        return Err(Error::UnresolvedIdentifier(symtab::Error(String::from(
+                            name,
+                        ))));
+                    }
+                };
                 let var_right = self.visit(&unary_op.right, in_loop)?;
                 let var_result = self.new_var(ty);
                 self.emit_call(location, fun, [var_right], var_result);
@@ -511,7 +522,6 @@ impl<'a> Generator<Running<'a>> {
         #[cfg(debug_assertions)]
         {
             assert_eq!(self.state.symtab.depth(), 1);
-            assert_eq!(self.state.funtab.depth(), 1);
         }
         match self.state.ins.last() {
             Some(Instruction {

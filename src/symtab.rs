@@ -3,7 +3,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 #[error("Unresolved identifier {0:?}")]
-pub struct Error(String);
+pub struct Error(pub String);
 
 #[doc(alias = "SymTab")]
 #[derive(Clone)]
