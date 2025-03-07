@@ -1,0 +1,13 @@
+fun f(): Int {
+    var i = 1;
+    var sum = 0;
+    while true do {
+        sum = sum + i;
+        i = i + 1;
+        if i > 5 then {
+            return sum;
+        }
+    }
+}
+
+f()

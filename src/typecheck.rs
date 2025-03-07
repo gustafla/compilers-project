@@ -1,6 +1,9 @@
 use crate::{
     SymbolTable,
-    ast::{Ast, Expression, Literal, Module, Operator, op::Ary},
+    ast::{
+        Ast, BinaryOp, Block, Conditional, Expression, FnCall, Literal, Module, Operator, UnaryOp,
+        Var, While, op::Ary,
+    },
     trace::{end_trace, start_trace, traceln},
 };
 use std::{fmt::Display, str::FromStr};
@@ -123,6 +126,61 @@ fn check_fn<'a>(
     Ok(*result)
 }
 
+fn contains_break_statement(ast: &Ast<'_>) -> bool {
+    match ast.tree.as_ref() {
+        Expression::Literal(_) => false,
+        Expression::Identifier(_) => false,
+        Expression::Conditional(Conditional {
+            condition,
+            then_expr,
+            else_expr,
+        }) => {
+            if let Some(else_expr) = else_expr {
+                contains_break_statement(condition)
+                    || contains_break_statement(then_expr)
+                    || contains_break_statement(else_expr)
+            } else {
+                contains_break_statement(condition) || contains_break_statement(then_expr)
+            }
+        }
+        Expression::FnCall(FnCall { arguments, .. }) => {
+            for arg in arguments {
+                if contains_break_statement(arg) {
+                    return true;
+                }
+            }
+            false
+        }
+        Expression::Block(Block {
+            expressions,
+            result,
+        }) => {
+            for ex in expressions {
+                if contains_break_statement(ex) {
+                    return true;
+                }
+            }
+            if let Some(res) = result {
+                contains_break_statement(res)
+            } else {
+                false
+            }
+        }
+        Expression::Var(Var { init, .. }) => contains_break_statement(init),
+        Expression::BinaryOp(BinaryOp { left, right, .. }) => {
+            contains_break_statement(left) || contains_break_statement(right)
+        }
+        Expression::UnaryOp(UnaryOp { right, .. }) => contains_break_statement(right),
+        Expression::While(While { condition, do_expr }) => {
+            contains_break_statement(condition) || contains_break_statement(do_expr)
+        }
+        Expression::Break => true,
+        Expression::Continue => false,
+        Expression::Return(Some(ast)) => contains_break_statement(ast),
+        Expression::Return(None) => false,
+    }
+}
+
 fn visit<'a>(
     ast: &mut Ast<'a>,
     symtab: &mut SymbolTable<'a, Type>,
@@ -243,10 +301,10 @@ fn visit<'a>(
             if condition != Type::Bool {
                 return Err(Error::WhileLoopCondition(condition));
             }
-            let (_, body_returns) = visit(&mut while_loop.do_expr, symtab, fun)?;
-            // If condition is trivially true this node may be known to return
+            visit(&mut while_loop.do_expr, symtab, fun)?;
+            // If loop is trivially infinite, this node may be known to return
             if let Expression::Literal(Literal::Bool(true)) = while_loop.condition.tree.as_ref() {
-                returns |= body_returns;
+                returns |= !contains_break_statement(&while_loop.do_expr);
             }
             Type::Unit
         }
