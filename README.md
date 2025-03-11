@@ -75,5 +75,5 @@ installed or isn't running on a `x86_64` CPU.
 
 ## License
 
-* **[`src/asm/stdlib.s`](src/asm/stdlib.s)**: This file is provided by Martin Pärtel and licensed under the [MIT License](https://opensource.org/license/mit).
+* **[`src/asm/stdlib.s`](src/asm/stdlib.s)**: This file is provided by Martin Pärtel and licensed under the [MIT License](https://opensource.org/license/mit). Note that the stdlib is statically linked to all binaries the compiler produces, thus redistribution of such binaries is subject to the MIT license terms.
 * **All other files**: Other source code and files within this project are licensed under the GNU General Public License v3.0 (GPL-3.0), as detailed in the [LICENSE](LICENSE) file.
