@@ -66,6 +66,13 @@ This repository has unit tests for the [tokenizer](src/tokenizer/tests.rs) and
 the [parser](src/parser/tests.rs), and [generated](build.rs) end to end tests,
 which compile and run programs in the [programs](programs)-directory.
 
+To run the tests, use cargo:
+```
+cargo test
+```
+The end-to-end tests are expected to fail if your system doesn't have binutils
+installed or isn't running on a `x86_64` CPU.
+
 ## License
 
 * **[`src/asm/stdlib.s`](src/asm/stdlib.s)**: This file is provided by Martin Pärtel and licensed under the [MIT License](https://opensource.org/license/mit).
