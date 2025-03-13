@@ -1,9 +1,11 @@
 use serde::Deserialize;
 use std::{
     fs::{self, Permissions},
-    io::Write,
+    io::{self, Write},
     path::Path,
     process::{Command, Stdio},
+    thread,
+    time::Duration,
 };
 
 include!(concat!(env!("OUT_DIR"), "/generated_tests.rs"));
@@ -48,14 +50,27 @@ fn compile_and_run_program(path: impl AsRef<Path>) {
     }
     tempfile.write_all(&elf).unwrap();
     tempfile.flush().unwrap();
-    let (_, binary) = tempfile.keep().unwrap();
+    let (tempfile, binary) = tempfile.keep().unwrap();
+    tempfile.sync_all().unwrap();
+    drop(tempfile);
 
     // Run and feed stdin
-    let mut process = Command::new(binary)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
+    println!("Running {}", binary.display());
+    let mut process = loop {
+        match Command::new(&binary)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => break child,
+            Err(e) if e.kind() == io::ErrorKind::ExecutableFileBusy => {
+                // Try again later
+                // https://github.com/rust-lang/rust/issues/114554
+                thread::sleep(Duration::from_secs(1));
+            }
+            Err(e) => panic!("Error: {e}"),
+        }
+    };
     if let (Some(input), Some(stdin)) = (&json.stdin, &mut process.stdin) {
         stdin.write_all(input.as_bytes()).unwrap();
     }
